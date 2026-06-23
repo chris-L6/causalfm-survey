@@ -1,0 +1,22 @@
+# Core requirements for setup, datasets, and shared causal_bench module
+numpy
+pandas
+matplotlib
+scikit-learn
+torch
+
+# Metalearners (S/T/X-learner, Debiased ML, IPW, DR)
+econml>=0.14.0
+
+# Lalonde dataset and benchmark utilities
+causalml>=0.14.0
+
+# Interactive notebook support
+ipywidgets>=8.0.0
+nbformat
+jupyter
+
+# Model-specific packages are installed inside notebooks as needed:
+#   - causalpfn          (pip install causalpfn)
+#   - Do-PFN             (git clone + pip install -r requirements.txt)
+#   - CausalFM-toolkit   (git clone + pip install -r requirements.txt)

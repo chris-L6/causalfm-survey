@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "causal-fm-survey"
+version = "0.1.0"
+description = "Benchmark companion code for survey on causal foundation models (CausalPFN, Do-PFN, CausalFM) vs. traditional metalearners"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "Causal ML Community", email = "causal@example.com" },
+]
+license = { text = "MIT" }
+
+dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "scikit-learn",
+    "ipywidgets>=8.0.0",
+    "nbformat",
+    "jupyter",
+    "torch",
+    "econml>=0.14.0",
+    "causalml>=0.14.0",
+    "causalpfn",
+]
+
+[project.optional-dependencies]
+dev-extras = []
+dev = [
+    "black",
+    "ruff",
+    "mypy",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["causal_bench"]
+
+[tool.uv]
+dev-dependencies = [
+    "black",
+    "ruff",
+    "mypy",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+
