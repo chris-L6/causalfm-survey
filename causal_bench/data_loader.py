@@ -1,22 +1,41 @@
 """
 Load the Lalonde dataset for benchmarking.
 
-The Lalonde dataset is a real-world causal inference benchmark combining:
-- NSW (National Supported Work) program participants (treatment group)
-- PSID (Panel Study of Income Dynamics) or CPS controls (control group)
+Downloads from Rajeev Dehejia's NBER page (the original source) — no external
+causal ML package required.
 
-Source: causalml.datasets.load_lalonde()
+Features: age, educ, black, hisp, married, nodegree, re74, re75
+Treatment: treat  (1 = NSW participant, 0 = PSID/CPS control)
+Outcome:   re78   (earnings in 1978)
 """
 
 from __future__ import annotations
+import os
 import numpy as np
+import pandas as pd
 from dataclasses import dataclass
-from typing import Tuple, Dict, Any
+from typing import Dict, Any
+
+_NBER_BASE = "http://www.nber.org/~rdehejia/data/"
+
+_NBER_FILES = {
+    "nsw_psid": [
+        _NBER_BASE + "nswre74_treated.txt",
+        _NBER_BASE + "psid_controls.txt",
+    ],
+}
+
+_NBER_COLS = ["treat", "age", "educ", "black", "hisp", "married", "nodegree", "re74", "re75", "re78"]
+
+_FEATURE_COLS = ["age", "educ", "black", "hisp", "married", "nodegree", "re74", "re75"]
+_TREATMENT_COL = "treat"
+_OUTCOME_COL = "re78"
+
+_CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "data_cache")
 
 
 @dataclass
 class LalondeDataset:
-    """Simple data holder for Lalonde (compatible with metrics evaluation)."""
     name: str
     X: np.ndarray
     T: np.ndarray
@@ -29,67 +48,66 @@ class LalondeDataset:
         rng = np.random.RandomState(seed)
         idx = rng.permutation(n)
         n_train = int(train_frac * n)
-        train_idx, test_idx = idx[:n_train], idx[n_train:]
-        return train_idx, test_idx
+        return idx[:n_train], idx[n_train:]
 
 
-def load_lalonde(treatment_name: str = "NSW", control_name: str = "PSID") -> LalondeDataset:
+def load_lalonde(variant: str = "nsw_psid") -> LalondeDataset:
     """
-    Load Lalonde dataset from causalml.
+    Load Lalonde dataset (NSW treated + PSID controls by default).
 
-    Parameters
-    ----------
-    treatment_name : str
-        Treatment group source ("NSW" is the only standard treatment)
-    control_name : str
-        Control group source ("PSID" or "CPS")
-
-    Returns
-    -------
-    LalondeDataset
-        Dataset with X, T, Y, ate (observed ATE), metadata
+    Downloads from Dehejia's NBER page on first call and caches locally.
     """
-    try:
-        from causalml.datasets import load_lalonde as causalml_load_lalonde
-    except ImportError:
-        raise ImportError(
-            "causalml is required to load Lalonde dataset. "
-            "Install it with: pip install causalml"
-        )
+    cache_path = os.path.join(_CACHE_DIR, f"lalonde_{variant}.csv")
 
-    data = causalml_load_lalonde()
-    X = data["X"].astype(np.float32)
-    T = data["T"].astype(np.float32)
-    Y = data["Y"].astype(np.float32)
+    if os.path.exists(cache_path):
+        df = pd.read_csv(cache_path)
+    else:
+        os.makedirs(_CACHE_DIR, exist_ok=True)
+        urls = _NBER_FILES.get(variant)
+        if urls is None:
+            raise ValueError(f"Unknown Lalonde variant '{variant}'. Choose from: {list(_NBER_FILES)}")
 
+        frames = []
+        for url in urls:
+            try:
+                frames.append(
+                    pd.read_csv(url, sep=r"\s+", header=None, names=_NBER_COLS)
+                )
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to download Lalonde data from {url}\n"
+                    f"Error: {e}\n"
+                    f"Check your internet connection or manually place a CSV at: {cache_path}"
+                )
+
+        df = pd.concat(frames, ignore_index=True)
+        df.to_csv(cache_path, index=False)
+
+    X = df[_FEATURE_COLS].values.astype(np.float32)
+    T = df[_TREATMENT_COL].values.astype(np.float32)
+    Y = df[_OUTCOME_COL].values.astype(np.float32)
     ate_observed = float(np.mean(Y[T == 1]) - np.mean(Y[T == 0]))
 
-    dataset_name = f"lalonde_{treatment_name}_{control_name}".lower()
-
     return LalondeDataset(
-        name=dataset_name,
-        X=X,
-        T=T,
-        Y=Y,
+        name=f"lalonde_{variant}",
+        X=X, T=T, Y=Y,
         ate=ate_observed,
         meta=dict(
-            source="Lalonde",
-            treatment=treatment_name,
-            control=control_name,
+            source="Dehejia & Wahba (1999) via NBER",
+            variant=variant,
             n_samples=len(Y),
             n_features=X.shape[1],
-            notes="Real-world data: no ground truth CATE available. ATE is observed mean difference.",
+            feature_names=_FEATURE_COLS,
+            notes="Real-world data: no ground truth CATE. ATE is observed mean difference.",
         ),
     )
 
 
-def list_available_datasets() -> list[str]:
-    """List available dataset names (for interactive demo)."""
+def list_available_datasets() -> list:
     return [
         "linear_confounded",
         "nonlinear_heterogeneous",
         "iv_binary",
         "frontdoor",
         "lalonde_nsw_psid",
-        "lalonde_nsw_cps",
     ]

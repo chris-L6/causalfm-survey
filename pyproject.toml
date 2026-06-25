@@ -7,7 +7,7 @@ name = "causal-fm-survey"
 version = "0.1.0"
 description = "Benchmark companion code for survey on causal foundation models (CausalPFN, Do-PFN, CausalFM) vs. traditional metalearners"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     { name = "Causal ML Community", email = "causal@example.com" },
 ]
@@ -22,13 +22,14 @@ dependencies = [
     "nbformat",
     "jupyter",
     "torch",
-    "econml>=0.14.0",
-    "causalml>=0.14.0",
     "causalpfn",
 ]
 
 [project.optional-dependencies]
-dev-extras = []
+metalearners = [
+    "econml>=0.14.0",
+    "causalml>=0.14.0",
+]
 dev = [
     "black",
     "ruff",

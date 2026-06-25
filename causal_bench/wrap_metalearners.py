@@ -43,7 +43,7 @@ class SLearnerWrapper:
         Y = np.asarray(Y, dtype=np.float32)
 
         base_model = self.model or RandomForestRegressor(n_estimators=100, random_state=0)
-        self._learner = SLearner(model_final=base_model)
+        self._learner = SLearner(overall_model=base_model)
         self._learner.fit(Y, T, X=X)
         return self
 
@@ -178,13 +178,14 @@ class DebiasedMLWrapper:
     def fit(self, X: np.ndarray, T: np.ndarray, Y: np.ndarray):
         from econml.dml import DML
         from sklearn.ensemble import RandomForestRegressor
+        from sklearn.linear_model import LinearRegression
 
         X = np.asarray(X, dtype=np.float32)
         T = np.asarray(T, dtype=np.float32)
         Y = np.asarray(Y, dtype=np.float32)
 
         base_model = self.model or RandomForestRegressor(n_estimators=100, random_state=0)
-        self._learner = DML(model_y=base_model, model_t=base_model)
+        self._learner = DML(model_y=base_model, model_t=base_model, model_final=LinearRegression())
         self._learner.fit(Y, T, X=X)
         return self
 
