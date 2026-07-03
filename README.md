@@ -1,6 +1,6 @@
 # Causal Foundation Models — Benchmark Suite
 
-Companion code for the survey on **causal foundation models** (simulation-trained, amortized models for CATE estimation). Compare three recent pretrained models against six traditional metalearners on synthetic and real-world causal inference benchmarks.
+Companion code for the survey on **causal foundation models** (prior-fitted networks that use in-context learning to estimate causal quantities on new datasets). Compare three recent pretrained models against six traditional metalearners on synthetic and real-world causal inference benchmarks.
 
 ## Models Included
 
