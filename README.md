@@ -1,13 +1,13 @@
 # Causal Foundation Models — Benchmark Suite
 
-Companion code for the survey on **causal foundation models** (prior-fitted networks that use in-context learning to estimate causal quantities on new datasets). Compare three recent pretrained models against six traditional metalearners on synthetic and real-world causal inference benchmarks.
+Companion code for the survey on **causal foundation models** (prior-fitted networks that use in-context learning to estimate causal quantities on new datasets). Compare three recent causal foundation models (CFMs) against six traditional metalearners on synthetic and real-world causal inference benchmarks.
 
 ## Models Included
 
 ### Foundation Models (In-Context Learning)
 | Model | Paper | Code |
 |---|---|---|
-| **CausalPFN** | Balazadeh et al., *CausalPFN: Amortized Causal Effect Estimation via In-Context Learning*, arXiv:2506.07918 | [vdblm/CausalPFN](https://github.com/vdblm/CausalPFN) |
+| **CausalPFN** | Balazadeh, Kamkari et al., *CausalPFN: Amortized Causal Effect Estimation via In-Context Learning*, arXiv:2506.07918 | [vdblm/CausalPFN](https://github.com/vdblm/CausalPFN) |
 | **Do-PFN** | Robertson, Reuter et al., *Do-PFN: In-Context Learning for Causal Effect Estimation*, arXiv:2506.06039 | [jr2021/Do-PFN](https://github.com/jr2021/Do-PFN) |
 | **CausalFM** | Ma, Frauen, Javurek & Feuerriegel, *Foundation Models for Causal Inference via Prior-Data Fitted Networks*, arXiv:2506.10914 (ICLR 2026) | [yccm/CausalFM-toolkit](https://github.com/yccm/CausalFM-toolkit) |
 
@@ -173,7 +173,7 @@ Each notebook includes an "Open in Colab" badge. Click it to run directly on Col
 
 - **Synthetic datasets**: Ground-truth CATE available; full metrics (PEHE, bias, coverage) computed.
 - **Lalonde**: Real-world data; no ground-truth CATE. Only observed ATE available for comparison.
-- **Foundation models**: Fast, zero-shot (no per-dataset training). Do not re-train; just condition on data.
+- **Foundation models**: Fast (no per-dataset training). Do not re-train; just condition on data.
 - **Metalearners**: Traditional ML methods trained from scratch on each dataset.
 - **Missing dependencies**: Notebooks gracefully skip unavailable models (with warnings) rather than crashing.
 
