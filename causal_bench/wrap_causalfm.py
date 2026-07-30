@@ -29,6 +29,7 @@ checkpoint path must be supplied (see notebook setup); if unavailable,
 from __future__ import annotations
 import time
 import numpy as np
+import torch
 from typing import Optional, Tuple
 
 
@@ -73,18 +74,26 @@ class CausalFMWrapper:
         return self
 
     def predict(self, X: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]:
-        X = np.asarray(X, dtype=np.float32)
-        result = self._model.estimate_cate(self._X_train, self._T_train, self._Y_train, X)
+        # The toolkit's PerFeatureTransformerCATE expects torch.Tensor inputs,
+        # with treatment/outcome shaped [N, 1] (not the 1-D arrays our common
+        # wrapper interface uses) -- see `_pack_eval_io` in
+        # src/tabpfn/model/causalFM.py.
+        X_train_t = torch.as_tensor(self._X_train, dtype=torch.float32)
+        T_train_t = torch.as_tensor(self._T_train, dtype=torch.float32).reshape(-1, 1)
+        Y_train_t = torch.as_tensor(self._Y_train, dtype=torch.float32).reshape(-1, 1)
+        X_test_t = torch.as_tensor(np.asarray(X, dtype=np.float32))
 
-        tau_hat = np.asarray(result["cate"]).reshape(-1)
+        result = self._model.estimate_cate(X_train_t, T_train_t, Y_train_t, X_test_t)
+
+        tau_hat = result["cate"].detach().cpu().numpy().reshape(-1)
         lower = upper = None
         # Optional calibrated uncertainty intervals, if the toolkit
         # returns them (key names per docs: 'cate_lower'/'cate_upper'
         # or 'ci_lower'/'ci_upper')
         for lk, uk in (("cate_lower", "cate_upper"), ("ci_lower", "ci_upper")):
             if lk in result and uk in result:
-                lower = np.asarray(result[lk]).reshape(-1)
-                upper = np.asarray(result[uk]).reshape(-1)
+                lower = result[lk].detach().cpu().numpy().reshape(-1)
+                upper = result[uk].detach().cpu().numpy().reshape(-1)
                 break
         return tau_hat, lower, upper
 
