@@ -61,6 +61,14 @@ jupyter notebook notebooks/02_lalonde_benchmark.ipynb
 - Automatically runs all 6 metalearners + selected foundation model on Lalonde
 - Produces results table (ATE error, relative error, runtime) and bar chart
 
+**3. Foundation Models Quickstart** (practitioner intro, no `causal_bench` wrappers):
+```bash
+jupyter notebook notebooks/03_foundation_models_quickstart.ipynb
+```
+- Standalone — calls each library's own native API directly (`CATEEstimator`/`ATEEstimator`, `DoPFNRegressor`, `StandardCATEModel`), not this repo's wrapper classes
+- Simulates one self-contained example dataset inline (a confounded discount-email scenario with known heterogeneous CATE) instead of using `causal_bench.data_generators`
+- One cell per model, each with markdown explaining install/setup and any library-specific gotchas
+
 ### Regenerate notebooks from scripts
 
 If you modify the notebook generator scripts, regenerate:
@@ -145,6 +153,11 @@ class *Wrapper:
 - Automatically runs all 6 metalearners + foundation model on Lalonde
 - Produces results table (ATE error, runtime) and bar charts
 
+**`03_foundation_models_quickstart.ipynb`** — Practitioner quickstart, standalone
+- Not built by `scripts/build_new_notebooks.py`; built by a one-off script (see repo history) since it doesn't share 01/02's wrapper-based structure
+- Does not import `causal_bench` — every foundation model call is that library's own native API, so a cell can be copy-pasted into another project as-is
+- Data is a small inline simulation (not `causal_bench.data_generators`), chosen for a business narrative rather than an abstract `X0, X1, ...` matrix
+
 ### `scripts/`
 
 **`build_new_notebooks.py`** — Generates notebooks 01–02
@@ -160,9 +173,12 @@ class *Wrapper:
 
 ### Models & dependencies
 
-- **CausalFM**: `CausalFMWrapper` requires a checkpoint path. If no checkpoint is available in the toolkit repo, you must train one or download from releases.
-- **Do-PFN**: Import path varies by commit; wrapper handles both `from dopfn import DoPFNRegressor` and `from model.dopfn import DoPFNRegressor`.
-- **Metalearners**: Require `econml` (automatically installed via `requirements.txt`).
+- **CausalPFN on Apple Silicon macOS**: segfaults (a hard process crash — not a catchable Python exception) on *both* `device="cpu"` and `device="mps"`. Verified directly, not inherited from the package's own docs: the installed `causalpfn` package has no `torch.compile` call anywhere in it, so this isn't a compiled-for-CUDA artifact; the likely cause is `F.scaled_dot_product_attention` (`models/transformer_layer.py`) hitting an unstable SDPA kernel on macOS's CPU/MPS backends — a known class of PyTorch bug, not a hard CUDA-only architectural requirement. Because it's a segfault, code must check the platform/device combo *before* calling into CausalPFN rather than wrapping the call in `try/except` (see `notebooks/03_foundation_models_quickstart.ipynb`'s CausalPFN cell for the guard: skip when `platform.system() == "Darwin" and platform.machine() == "arm64"` and `device != "cuda"`). Untested but likely fine: Colab GPU (CUDA, best-supported) and Colab CPU (Linux x86_64, mature SDPA kernels) — the bug looks macOS-specific rather than universal to non-CUDA devices.
+- **CausalFM**: `CausalFMWrapper` requires a checkpoint path. `CausalFM-toolkit` is **not on PyPI** and is not `pip install`-able as a package — it must be `git clone`d and its root added to `sys.path` (both the `causalfm` package and its internal `src.tabpfn` module live there). It also needs `einops`, `tabpfn==2.0.9`, and `tensorboard` — packages the toolkit's own `requirements.txt` bundles inside a full frozen dev-env snapshot (including Linux/CUDA-only pins) that should **not** be installed as-is; install just those three instead (see the venv caveat below for how). The real pretrained checkpoint ships at `checkpoints/checkpoints_standard/best_model.pth` inside the toolkit repo (not `checkpoints/best_model.pth`, despite what the toolkit's own docs/README examples show). `StandardCATEModel.estimate_cate` expects `torch.Tensor` inputs with treatment/outcome shaped `[N, 1]`, not the 1-D numpy arrays used elsewhere in this repo's common wrapper interface — `wrap_causalfm.py` converts internally.
+- **`uv`-managed local venv has no `pip` module**: notebook cells that use `%pip install ...` (or `!pip install ...`) silently no-op locally with `No module named pip` — they only work on Colab, where `pip` is preinstalled. Locally, use `uv pip install <pkg>` instead of relying on the notebook's pip cells.
+- **`uv sync --extra metalearners` is currently broken on Python 3.10** (the version this project targets): it resolves `llvmlite==0.36.0` via `numba`/`sparse`, which only supports Python `<3.10` and fails to build. The `metalearners` extra exists in `pyproject.toml` for documentation/reference, but installing it locally means `uv pip install econml causalml` (ad hoc — this resolves a different, Python-3.10-compatible `llvmlite`/`numba` pair, bypassing the broken lock resolution) rather than `uv sync --extra metalearners`. Likewise for `causalfm`: prefer `uv pip install einops "tabpfn==2.0.9" tensorboard` over `uv sync --extra causalfm`. Reserve `uv sync` (no extras, or `uv sync` alone) for the core deps only — running it with any extra reconciles the whole environment to exactly what's declared and will **uninstall** ad hoc-installed packages from extras you didn't pass.
+- **Do-PFN**: Import path varies by commit; wrapper handles both `from dopfn import DoPFNRegressor` and `from model.dopfn import DoPFNRegressor`. Like CausalFM, it's not on PyPI — clone it and add it to `sys.path`.
+- **Metalearners**: Require `econml` + `causalml` (the `metalearners` extra in `pyproject.toml` / `requirements.txt`).
 - **Missing models**: Notebooks use `try/except` for installs; unavailable models are skipped with a warning.
 
 ### Running & testing
