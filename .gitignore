@@ -9,6 +9,7 @@ build/
 data_cache/
 *.csv
 *.png
+!notebooks/assets/*.png
 *.pth
 *.ipynb_checkpoints/
 .ipynb_checkpoints/
