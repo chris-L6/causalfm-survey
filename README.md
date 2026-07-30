@@ -176,6 +176,8 @@ Each notebook includes an "Open in Colab" badge. Click it to run directly on Col
 - **Foundation models**: Fast, zero-shot (no per-dataset training). Do not re-train; just condition on data.
 - **Metalearners**: Traditional ML methods trained from scratch on each dataset.
 - **Missing dependencies**: Notebooks gracefully skip unavailable models (with warnings) rather than crashing.
+- **CausalFM setup**: `CausalFM-toolkit` isn't on PyPI — the notebook clones it and adds it to `sys.path` automatically, but it also needs `einops`, `tabpfn==2.0.9`, and `tensorboard` (its own `requirements.txt` is a frozen dev snapshot with Linux/CUDA-only pins and shouldn't be installed directly). On Colab the notebook's `%pip install` cell handles this for you. Locally: `uv pip install einops "tabpfn==2.0.9" tensorboard` (see next note — don't use `uv sync --extra causalfm`).
+- **Local venv (`uv`) has no `pip`**: notebook cells using `%pip install ...` only work on Colab (which ships `pip`). Locally, install missing packages with `uv pip install <pkg>` instead. Avoid `uv sync --extra <name>` for the `metalearners`/`causalfm` extras specifically — on Python 3.10 it resolves an incompatible `llvmlite` for `metalearners` and, for either extra, reconciles the whole env to just what's declared, uninstalling anything from extras you didn't also pass.
 
 ## Citation
 

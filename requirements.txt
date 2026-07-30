@@ -19,4 +19,8 @@ jupyter
 # Model-specific packages are installed inside notebooks as needed:
 #   - causalpfn          (pip install causalpfn)
 #   - Do-PFN             (git clone + pip install -r requirements.txt)
-#   - CausalFM-toolkit   (git clone + pip install -r requirements.txt)
+#   - CausalFM-toolkit   (git clone; not pip-installable, added to sys.path)
+#                        + einops, tabpfn==2.0.9, tensorboard
+#                        (do NOT install the toolkit's own requirements.txt
+#                        as-is -- it's a frozen dev env with Linux/CUDA-only
+#                        pins. Locally: `uv sync --extra causalfm`.)

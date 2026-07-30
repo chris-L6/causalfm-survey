@@ -30,6 +30,15 @@ metalearners = [
     "econml>=0.14.0",
     "causalml>=0.14.0",
 ]
+# CausalFM (yccm/CausalFM-toolkit) is not on PyPI and must be cloned
+# separately -- these are the extra deps it needs beyond this project's
+# core requirements. Its own requirements.txt is a full frozen dev env
+# (includes Linux/CUDA-only wheels) and should not be installed as-is.
+causalfm = [
+    "einops",
+    "tabpfn==2.0.9",
+    "tensorboard",
+]
 dev = [
     "black",
     "ruff",

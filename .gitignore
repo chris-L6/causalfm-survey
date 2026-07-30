@@ -12,3 +12,5 @@ data_cache/
 *.pth
 *.ipynb_checkpoints/
 .ipynb_checkpoints/
+CausalFM-toolkit/
+Do-PFN/
