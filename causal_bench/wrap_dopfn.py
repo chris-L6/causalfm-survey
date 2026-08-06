@@ -5,101 +5,112 @@ common `.fit(X, T, Y)` / `.predict(X)` interface for the benchmark.
 Do-PFN: Robertson & Reuter et al., "Do-PFN: In-Context Learning for Causal
 Effect Estimation", arXiv:2506.06039.
 
-Do-PFN is NOT distributed on PyPI -- it must be cloned from GitHub and its
-requirements installed:
+Do-PFN is NOT distributed on PyPI -- it must be cloned from GitHub:
 
     git clone https://github.com/jr2021/Do-PFN.git
-    cd Do-PFN && pip install -r requirements.txt
 
-This wrapper assumes the cloned `Do-PFN` directory has been added to
-`sys.path` (see notebook setup cells), exposing `DoPFNRegressor` and
-`load_dataset` from its top-level package, per its README:
+Don't `pip install -r Do-PFN/requirements.txt` as-is -- it's a frozen
+research/benchmark environment (pins `catboost==1.1.1`, which has no wheel
+for recent Python, purely for baseline comparisons `DoPFNRegressor` never
+imports). The actual runtime deps beyond `torch`/`numpy`/`scipy`/`pandas`/
+`scikit-learn` are just `networkx`, `tqdm`, `einops`.
+
+This wrapper assumes the cloned `Do-PFN` directory lives at `repo_dir`
+(default `"Do-PFN"`, relative to the process's cwd). Verified directly
+against the current `jr2021/Do-PFN` main branch source (its README has
+drifted from the code):
+
+    from scripts.transformer_prediction_interface import DoPFNRegressor  # not `dopfn`
 
     dopfn = DoPFNRegressor()
-    dopfn.fit(train_ds.x, train_ds.y)
-    y_pred = dopfn.predict_full(test_ds.x)
+    dopfn.fit(X_full_train, Y_train)          # X_full: treatment in COLUMN 0
+    tau_hat = dopfn.predict_cate(X_full_test)  # torch.Tensor input required
 
-For CATE, Do-PFN's README estimates:
-    CATE = E[y | do(t=1), x] - E[y | do(t=0), x]
-by setting the treatment column to 1 and 0 respectively and taking the
-difference of predicted means.
+`DoPFNRegressor()` loads its checkpoint via a path relative to the Do-PFN
+repo root, lazily on both construction and `fit()` -- so this wrapper
+`chdir`s into `repo_dir` for those calls and restores the original cwd
+afterward (`finally`).
+
+Requires `torch<2.10`: Do-PFN's own `model/layer.py` imports `Optional` from
+`torch.nn.modules.transformer`, an unofficial re-export PyTorch removed in
+2.10. Raises `ImportError: cannot import name 'Optional' from
+'torch.nn.modules.transformer'` on newer torch -- not something this wrapper
+can work around.
 """
 
 from __future__ import annotations
+import os
 import time
 import numpy as np
-from copy import deepcopy
+import torch
 from typing import Optional, Tuple
 
 
 class DoPFNWrapper:
     name = "Do-PFN"
 
-    def __init__(self, treatment_col: int = 0, device: str = "cpu"):
+    def __init__(self, repo_dir: str = "Do-PFN", device: str = "cpu"):
         """
-        treatment_col: index of the treatment column within the X matrix
-            passed to `fit`/`predict`. Do-PFN treats the SCM input matrix
-            as a single feature block including treatment; this wrapper
-            concatenates [X, T] and sets treatment_col = X.shape[1] by
-            default unless overridden (see `fit`).
+        repo_dir: path to the cloned Do-PFN repo root (checkpoint paths are
+            relative to it, so this wrapper `chdir`s there for
+            construction/fit/predict).
+        device: accepted for interface consistency with the other wrappers;
+            DoPFNRegressor takes no device argument of its own.
         """
-        self.treatment_col = treatment_col
+        self.repo_dir = repo_dir
         self.device = device
         self._model = None
 
     @classmethod
-    def is_available(cls) -> bool:
+    def is_available(cls, repo_dir: str = "Do-PFN") -> bool:
+        if not os.path.isdir(repo_dir):
+            return False
+        import sys
+        sys.path.insert(0, os.path.abspath(repo_dir))
         try:
-            from dopfn import DoPFNRegressor  # noqa: F401
+            from scripts.transformer_prediction_interface import DoPFNRegressor  # noqa: F401
             return True
         except Exception:
-            try:
-                # some forks expose it at top-level package import
-                import DoPFN  # noqa: F401
-                return True
-            except Exception:
-                return False
-
-    def _get_regressor_cls(self):
-        try:
-            from dopfn import DoPFNRegressor
-            return DoPFNRegressor
-        except Exception:
-            from model.dopfn import DoPFNRegressor  # fallback path used in some clones
-            return DoPFNRegressor
+            return False
 
     def fit(self, X: np.ndarray, T: np.ndarray, Y: np.ndarray):
-        """X here is the covariate matrix WITHOUT treatment; this wrapper
-        builds the combined design matrix [X, T] and remembers the
-        treatment column index = X.shape[1]."""
+        """Builds the combined design matrix [T, X] -- treatment in column
+        0, since `predict_cid` overwrites `X[:, 0]` internally regardless of
+        what's there at prediction time."""
+        import sys
+        sys.path.insert(0, os.path.abspath(self.repo_dir))
+        from scripts.transformer_prediction_interface import DoPFNRegressor
+
         X = np.asarray(X, dtype=np.float32)
         T = np.asarray(T, dtype=np.float32).reshape(-1, 1)
         Y = np.asarray(Y, dtype=np.float32)
+        X_full = np.concatenate([T, X], axis=1)
 
-        self.treatment_col = X.shape[1]
-        X_full = np.concatenate([X, T], axis=1)
-
-        RegCls = self._get_regressor_cls()
-        self._model = RegCls()
-        self._model.fit(X_full, Y)
+        _cwd = os.getcwd()
+        os.chdir(self.repo_dir)
+        try:
+            self._model = DoPFNRegressor()
+            self._model.show_progress = False
+            self._model.fit(X_full, Y)
+        finally:
+            os.chdir(_cwd)
         return self
 
     def predict(self, X: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]:
-        """Returns (tau_hat, lower_95, upper_95) using Do-PFN's CATE
-        formula from its README: CATE = E[y|do(t=1),x] - E[y|do(t=0),x]."""
+        """Returns (tau_hat, lower_95, upper_95) via Do-PFN's own
+        `predict_cate`, which computes do(T=1) minus do(T=0) internally."""
         X = np.asarray(X, dtype=np.float32)
-        x1, x0 = deepcopy(X), deepcopy(X)
-        x1_full = np.concatenate([x1, np.ones((len(x1), 1), dtype=np.float32)], axis=1)
-        x0_full = np.concatenate([x0, np.zeros((len(x0), 1), dtype=np.float32)], axis=1)
+        # Column 0 is a placeholder -- predict_cate overwrites it internally.
+        X_full = np.concatenate([np.zeros((len(X), 1), dtype=np.float32), X], axis=1)
 
-        y_pred_1 = self._model.predict_full(x1_full)
-        y_pred_0 = self._model.predict_full(x0_full)
-
-        # predict_full may return distributions; reduce to means if needed
-        y1 = _reduce_to_mean(y_pred_1)
-        y0 = _reduce_to_mean(y_pred_0)
-
-        tau_hat = (y1 - y0).reshape(-1)
+        _cwd = os.getcwd()
+        os.chdir(self.repo_dir)
+        try:
+            tau_hat = np.asarray(
+                self._model.predict_cate(torch.as_tensor(X_full))
+            ).reshape(-1)
+        finally:
+            os.chdir(_cwd)
         return tau_hat, None, None
 
     def run(self, X_train, T_train, Y_train, X_test):
@@ -109,21 +120,3 @@ class DoPFNWrapper:
         ate_hat = float(np.mean(tau_hat))
         runtime = time.time() - t0
         return tau_hat, lower, upper, ate_hat, runtime
-
-
-def _reduce_to_mean(pred) -> np.ndarray:
-    """Do-PFN's predict_full can return either a point prediction array
-    or a richer object (e.g. dict with 'mean', or a distribution object
-    with a `.mean()` method) depending on version. Handle common cases."""
-    pred_arr = np.asarray(pred) if not isinstance(pred, dict) else None
-    if isinstance(pred, dict):
-        for key in ("mean", "mu", "y_pred", "prediction"):
-            if key in pred:
-                return np.asarray(pred[key]).reshape(-1)
-        raise ValueError(f"Unrecognized Do-PFN prediction dict keys: {list(pred.keys())}")
-    if hasattr(pred, "mean") and callable(getattr(pred, "mean")):
-        try:
-            return np.asarray(pred.mean()).reshape(-1)
-        except TypeError:
-            pass
-    return pred_arr.reshape(-1)

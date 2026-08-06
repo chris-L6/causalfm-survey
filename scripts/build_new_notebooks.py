@@ -1,10 +1,9 @@
 """
-Builds the refactored benchmark notebooks using nbformat.
+Builds the Lalonde benchmark notebook using nbformat.
 Run: python3 scripts/build_new_notebooks.py
 
 Generates:
-- 01_interactive_model_demo.ipynb (model + dataset selection with widgets)
-- 02_lalonde_benchmark.ipynb (all models on Lalonde dataset)
+- Lalonde_benchmark.ipynb (all 6 metalearners + 1 selected foundation model on Lalonde)
 """
 import nbformat as nbf
 import os
@@ -36,212 +35,13 @@ def save(nb, filename):
 
 
 # ============================================================================
-# 00 - Setup & Shared Data (KEEP EXISTING)
-# ============================================================================
-# (This notebook already exists and doesn't need regeneration)
-
-# ============================================================================
-# 01 - Interactive Model Demo
+# Lalonde Benchmark (All Models)
 # ============================================================================
 nb = nbf.v4.new_notebook()
 nb.cells = [
-    md(f"""# 01 — Interactive Model Demo
+    md(f"""# Lalonde Benchmark: Foundation Models vs. Metalearners
 
-{colab_badge('notebooks/01_interactive_model_demo.ipynb')}
-
-**Choose a model and dataset, then run it!**
-
-This notebook lets you interactively select from:
-- **Models**: Foundation models (CausalPFN, Do-PFN, CausalFM) or traditional metalearners (S/T/X-learner, Debiased ML, IPW, DR)
-- **Datasets**: Synthetic (linear, nonlinear, IV, frontdoor) or real-world (Lalonde)
-
-All models follow a unified interface, so swapping between them is seamless."""),
-
-    md("""## 1. Environment Setup
-
-If running on **Colab**, this clones the repo. If **local**, it imports from parent directory."""),
-
-    code("""import os, sys, subprocess
-IN_COLAB = "google.colab" in sys.modules
-REPO_URL = "https://github.com/chris-L6/causalfm-survey.git"
-REPO_DIR = "causalfm-survey"
-
-if IN_COLAB:
-    if not os.path.exists(REPO_DIR):
-        subprocess.run(["git", "clone", REPO_URL], check=True)
-    sys.path.insert(0, REPO_DIR)
-else:
-    sys.path.insert(0, os.path.abspath(".."))
-
-import causal_bench
-print("causal_bench imported from:", causal_bench.__file__)"""),
-
-    code("""!pip install -q econml causalml ipywidgets
-import ipywidgets as widgets
-import numpy as np
-import pandas as pd
-import time
-import warnings
-warnings.filterwarnings('ignore')
-
-import torch
-if torch.cuda.is_available():
-    device = "cuda"
-elif torch.backends.mps.is_available():
-    device = "mps"
-else:
-    device = "cpu"
-print(f"Device: {device}")"""),
-
-    md("## 2. Dataset Loader"),
-
-    code("""from causal_bench import get_dataset, load_lalonde, list_available_datasets
-
-# Load all datasets
-DATASETS = {}
-print("Loading synthetic datasets...")
-for name in ["linear_confounded", "nonlinear_heterogeneous", "iv_binary", "frontdoor"]:
-    DATASETS[name] = get_dataset(name, n=2000, seed=0)
-
-print("Loading Lalonde dataset...")
-try:
-    DATASETS["lalonde_nsw_psid"] = load_lalonde()
-    print("  ✓ Lalonde loaded")
-except Exception as e:
-    print(f"  ✗ Lalonde unavailable: {e}")
-
-print(f"\\nAvailable datasets: {list(DATASETS.keys())}")
-for name, ds in DATASETS.items():
-    print(f"  {name}: n={len(ds.Y)}, X.shape={ds.X.shape}, ATE={ds.ate:.3f}")"""),
-
-    md("## 3. Model Selection Widgets"),
-
-    code("""from causal_bench import (
-    CausalPFNWrapper, DoPFNWrapper, CausalFMWrapper,
-    SLearnerWrapper, TLearnerWrapper, XLearnerWrapper,
-    DebiasedMLWrapper, IPWWrapper, DRWrapper
-)
-
-MODELS = {
-    "CausalPFN": CausalPFNWrapper,
-    "Do-PFN": DoPFNWrapper,
-    "CausalFM": CausalFMWrapper,
-    "S-learner": SLearnerWrapper,
-    "T-learner": TLearnerWrapper,
-    "X-learner": XLearnerWrapper,
-    "Debiased ML": DebiasedMLWrapper,
-    "IPW": IPWWrapper,
-    "DR (Doubly Robust)": DRWrapper,
-}
-
-# Check availability
-available_models = {name: cls for name, cls in MODELS.items() if cls.is_available()}
-print(f"Available models ({len(available_models)}/{len(MODELS)}):")
-for name in available_models:
-    print(f"  ✓ {name}")
-for name in set(MODELS.keys()) - set(available_models.keys()):
-    print(f"  ✗ {name}")
-
-# Widgets for selection
-model_dropdown = widgets.Dropdown(options=available_models.keys(), description="Model:")
-dataset_dropdown = widgets.Dropdown(options=DATASETS.keys(), description="Dataset:")
-
-display(widgets.VBox([model_dropdown, dataset_dropdown]))"""),
-
-    md("## 4. Run Selected Model on Selected Dataset"),
-
-    code("""from causal_bench import evaluate_cate
-
-def run_demo():
-    model_name = model_dropdown.value
-    dataset_name = dataset_dropdown.value
-
-    print(f"\\n{'='*60}")
-    print(f"Running {model_name} on {dataset_name}")
-    print(f"{'='*60}\\n")
-
-    ds = DATASETS[dataset_name]
-    train_idx, test_idx = ds.train_test_split(0.7, seed=0)
-
-    X_train, X_test = ds.X[train_idx], ds.X[test_idx]
-    T_train, Y_train = ds.T[train_idx], ds.Y[train_idx]
-
-    # For synthetic datasets, we have ground truth tau
-    if hasattr(ds, 'tau'):
-        tau_test = ds.tau[test_idx]
-    else:
-        tau_test = None
-
-    try:
-        t0 = time.time()
-        model_cls = MODELS[model_name]
-
-        # Special handling for CausalFM (needs checkpoint path)
-        if model_name == "CausalFM":
-            checkpoint_path = "CausalFM-toolkit/checkpoints/best_model.pth"
-            if not os.path.exists(checkpoint_path):
-                raise FileNotFoundError(f"CausalFM checkpoint not found at {checkpoint_path}")
-            model = model_cls(checkpoint_path=checkpoint_path, device=device)
-        else:
-            model = model_cls(device=device) if "Wrapper" in model_cls.__name__ and "Foundation" not in model_name else model_cls()
-
-        model.fit(X_train, T_train, Y_train)
-        tau_hat, lower, upper = model.predict(X_test)
-        runtime = time.time() - t0
-
-        ate_hat = float(np.mean(tau_hat))
-
-        if tau_test is not None:
-            result = evaluate_cate(tau_hat, tau_test, ate_hat=ate_hat, ate_true=ds.ate,
-                                   lower=lower, upper=upper, runtime_s=runtime)
-            print("Results:")
-            for key, val in result.items():
-                if val is not None:
-                    print(f"  {key:20s}: {val:10.4f}")
-        else:
-            print(f"  ATE_hat:          {ate_hat:.4f}")
-            print(f"  ATE_true (observed): {ds.ate:.4f}")
-            print(f"  Runtime:          {runtime:.2f}s")
-            print("  (Ground truth CATE unavailable for real data)")
-
-    except Exception as e:
-        print(f"ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-
-# Create run button
-run_button = widgets.Button(description="▶ Run Demo")
-output = widgets.Output()
-
-def on_click(b):
-    with output:
-        output.clear_output(wait=False)
-        run_demo()
-
-run_button.on_click(on_click)
-
-display(widgets.VBox([run_button, output]))"""),
-
-    md("""## Notes
-
-- **Foundation models** (CausalPFN, Do-PFN, CausalFM) use in-context learning: they don't re-train on your data, just condition on it.
-- **Metalearners** (S/T/X, Debiased ML, etc.) are traditional ML methods trained separately for control and treatment.
-- **Synthetic datasets** have ground-truth CATE (`tau`), so full metrics (PEHE, bias, coverage) are computed.
-- **Lalonde** is real-world data: no ground truth CATE, only observed ATE is available.
-- **Missing models** (shown with ✗) require additional installs; check the notebook setup cells."""),
-]
-
-save(nb, "01_interactive_model_demo.ipynb")
-
-
-# ============================================================================
-# 02 - Lalonde Benchmark (All Models)
-# ============================================================================
-nb = nbf.v4.new_notebook()
-nb.cells = [
-    md(f"""# 02 — Lalonde Benchmark: Foundation Models vs. Metalearners
-
-{colab_badge('notebooks/02_lalonde_benchmark.ipynb')}
+{colab_badge('notebooks/Lalonde_benchmark.ipynb')}
 
 **Compare one foundation model against traditional metalearners on the Lalonde dataset.**
 
@@ -254,13 +54,31 @@ on the Lalonde real-world causal inference benchmark and produces a comparison t
     md("## 1. Setup"),
 
     code("""import os, sys, subprocess
+
 IN_COLAB = "google.colab" in sys.modules
-REPO_URL = "https://github.com/chris-L6/causalfm-survey.git"
-REPO_DIR = "causalfm-survey"
+
+# ── FOR COLAB ONLY: set your GitHub token if the repo is private ──────────────
+# Create one at: github.com/settings/tokens  (scope: repo → read)
+# Leave as "" if the repo is public.
+GITHUB_TOKEN = ""
+# ──────────────────────────────────────────────────────────────────────────────
+
+REPO_SLUG = "chris-L6/causalfm-survey"
+REPO_DIR  = "causalfm-survey"
 
 if IN_COLAB:
     if not os.path.exists(REPO_DIR):
-        subprocess.run(["git", "clone", REPO_URL], check=True)
+        if GITHUB_TOKEN:
+            clone_url = f"https://{GITHUB_TOKEN}@github.com/{REPO_SLUG}.git"
+        else:
+            clone_url = f"https://github.com/{REPO_SLUG}.git"
+        result = subprocess.run(["git", "clone", clone_url], capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(
+                "git clone failed — the repo is likely private.\\n"
+                "Fix: set GITHUB_TOKEN above (github.com/settings/tokens, scope: repo→read).\\n"
+                f"Error: {result.stderr.strip()}"
+            )
     sys.path.insert(0, REPO_DIR)
 else:
     sys.path.insert(0, os.path.abspath(".."))
@@ -268,12 +86,44 @@ else:
 import causal_bench
 print("causal_bench imported from:", causal_bench.__file__)"""),
 
-    code("""!pip install -q econml causalml torch
-import ipywidgets as widgets
-import numpy as np
-import pandas as pd
-import time
-import warnings
+    md("""### One-time environment check — needed for Do-PFN
+
+Do-PFN's model code depends on an internal PyTorch name removed in
+`torch>=2.10`. This must run *before* `torch` is imported anywhere else in
+this notebook (see next cell).
+
+- **On Colab**: installs `torch<2.10` and restarts the runtime automatically
+  — re-run this cell once after it reconnects, then continue from the top.
+- **Locally (this repo's `uv` venv)**: `pip` isn't available inside the
+  notebook, so this only detects the problem. Fix in a terminal:
+  `uv pip install "torch<2.10"`, then restart the kernel.
+- Not planning to run Do-PFN? Skip — CausalPFN and CausalFM work fine on any
+  recent torch."""),
+
+    code("""def _torch_pre_2_10():
+    try:
+        import torch
+    except ImportError:
+        return True  # not installed yet -- nothing to fix here
+    major, minor = (int(p) for p in torch.__version__.split("+")[0].split(".")[:2])
+    return (major, minor) < (2, 10)
+
+if _torch_pre_2_10():
+    print("OK -- torch version is compatible with Do-PFN (or not installed yet).")
+elif IN_COLAB:
+    print("torch >= 2.10 detected -- installing torch<2.10 and restarting the runtime...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "torch<2.10"], check=True)
+    print("Restarting now. After it reconnects, re-run THIS cell, then continue from the top.")
+    os.kill(os.getpid(), 9)  # Colab reconnects automatically with a fresh process
+else:
+    import torch
+    print(f"torch {torch.__version__} is >= 2.10 -- Do-PFN will fail to import.")
+    print('Fix, in a terminal (not this notebook -- local uv venv has no pip):')
+    print('    uv pip install "torch<2.10"')
+    print("then restart this notebook's kernel and re-run from the top.")"""),
+
+    code("""%pip install -q econml causalpfn
+import numpy as np, pandas as pd, time, warnings
 warnings.filterwarnings('ignore')
 
 import torch
@@ -284,6 +134,32 @@ elif torch.backends.mps.is_available():
 else:
     device = "cpu"
 print(f"Device: {device}")"""),
+
+    md("""### Do-PFN and CausalFM setup
+
+Neither is on PyPI, so clone if missing and install just the extra deps each
+actually needs — **not** their bundled `requirements.txt` files, which are
+frozen dev/CUDA snapshots that fail to install as-is (`catboost==1.1.1` has
+no wheel for recent Python; CausalFM's snapshot has Linux/CUDA-only pins).
+CausalFM additionally needs its pretrained checkpoint, which ships inside the
+cloned repo at `checkpoints/checkpoints_standard/best_model.pth`."""),
+
+    code("""DOPFN_DIR = "Do-PFN"
+CAUSALFM_DIR = "CausalFM-toolkit"
+
+if not os.path.exists(DOPFN_DIR):
+    print(f"Cloning Do-PFN...")
+    subprocess.run(["git", "clone", "https://github.com/jr2021/Do-PFN.git"], check=True)
+sys.path.insert(0, os.path.abspath(DOPFN_DIR))
+
+if not os.path.exists(CAUSALFM_DIR):
+    print(f"Cloning CausalFM-toolkit...")
+    subprocess.run(["git", "clone", "https://github.com/yccm/CausalFM-toolkit.git"], check=True)
+sys.path.insert(0, os.path.abspath(CAUSALFM_DIR))
+
+if IN_COLAB:
+    get_ipython().system('pip install -q networkx tqdm einops "tabpfn==2.0.9" tensorboard')
+# Locally: uv pip install networkx tqdm einops "tabpfn==2.0.9" tensorboard"""),
 
     md("## 2. Load Lalonde Dataset"),
 
@@ -299,110 +175,117 @@ T_train, Y_train = ds.T[train_idx], ds.Y[train_idx]
 
 print(f"  train: n={len(train_idx)}, test: n={len(test_idx)}")"""),
 
-    md("## 3. Select Foundation Model"),
+    md("""## 3. Select Foundation Model
 
-    code("""from causal_bench import CausalPFNWrapper, DoPFNWrapper, CausalFMWrapper
+**Change `FOUNDATION_MODEL` below, then run this cell and the next one.**"""),
+
+    code("""# ── EDIT THIS LINE ────────────────────────────────────────────────────────────
+FOUNDATION_MODEL = "CausalPFN"   # CausalPFN | Do-PFN | CausalFM
+# ──────────────────────────────────────────────────────────────────────────────
+
+from causal_bench import CausalPFNWrapper, DoPFNWrapper, CausalFMWrapper
 
 FOUNDATION_MODELS = {
     "CausalPFN": CausalPFNWrapper,
-    "Do-PFN": DoPFNWrapper,
-    "CausalFM": CausalFMWrapper,
+    "Do-PFN":    DoPFNWrapper,
+    "CausalFM":  CausalFMWrapper,
 }
 
-available_foundation = {name: cls for name, cls in FOUNDATION_MODELS.items() if cls.is_available()}
-print(f"Available foundation models: {list(available_foundation.keys())}")
+print("Foundation model availability:")
+for name, cls in FOUNDATION_MODELS.items():
+    print(f"  {'✓' if cls.is_available() else '✗'}  {name}")
 
-foundation_dropdown = widgets.Dropdown(options=available_foundation.keys(), description="Model:")
-display(foundation_dropdown)"""),
+assert FOUNDATION_MODEL in FOUNDATION_MODELS, \\
+    f"Unknown model {FOUNDATION_MODEL!r}. Choose from: {list(FOUNDATION_MODELS)}"
+print(f"\\nSelected: {FOUNDATION_MODEL!r}  |  device: {device}")"""),
 
     md("## 4. Run All Models"),
 
     code("""from causal_bench import (
     SLearnerWrapper, TLearnerWrapper, XLearnerWrapper,
-    DebiasedMLWrapper, IPWWrapper, DRWrapper
+    DebiasedMLWrapper, IPWWrapper, DRWrapper,
 )
 
 METALEARNERS = {
-    "S-learner": SLearnerWrapper,
-    "T-learner": TLearnerWrapper,
-    "X-learner": XLearnerWrapper,
-    "Debiased ML": DebiasedMLWrapper,
-    "IPW": IPWWrapper,
+    "S-learner":          SLearnerWrapper,
+    "T-learner":          TLearnerWrapper,
+    "X-learner":          XLearnerWrapper,
+    "Debiased ML":        DebiasedMLWrapper,
+    "IPW":                IPWWrapper,
     "DR (Doubly Robust)": DRWrapper,
 }
 
 results = []
 
-# Run metalearners
-print("="*70)
+# ── Run all metalearners ──────────────────────────────────────────────────────
+print("=" * 70)
 print("METALEARNERS")
-print("="*70)
+print("=" * 70)
 for name, model_cls in METALEARNERS.items():
     if not model_cls.is_available():
-        print(f"  {name:25s}: SKIPPED (not available)")
+        print(f"  {name:25s}: SKIPPED (not installed)")
         continue
-
     try:
         t0 = time.time()
         model = model_cls()
         model.fit(X_train, T_train, Y_train)
-        tau_hat, lower, upper = model.predict(X_test)
+        tau_hat, _, _ = model.predict(X_test)
         runtime = time.time() - t0
         ate_hat = float(np.mean(tau_hat))
-
-        result = {
+        results.append({
             "model": name,
-            "ate_hat": ate_hat,
-            "ate_true": ds.ate,
+            "ate_hat": ate_hat, "ate_true": ds.ate,
             "ate_abs_error": abs(ate_hat - ds.ate),
             "ate_rel_error": abs(ate_hat - ds.ate) / (abs(ds.ate) + 1e-8),
             "runtime_s": runtime,
-        }
-        results.append(result)
-        print(f"  {name:25s}: ATE_error={result['ate_abs_error']:.4f}, runtime={runtime:.2f}s")
+        })
+        print(f"  {name:25s}: ATE_error={abs(ate_hat-ds.ate):.1f}  runtime={runtime:.2f}s")
     except Exception as e:
         print(f"  {name:25s}: ERROR: {e}")
 
-# Run foundation model
-print("\\n" + "="*70)
-print("FOUNDATION MODEL")
-print("="*70)
-fm_name = foundation_dropdown.value
-print(f"  {fm_name}...")
+# ── Run selected foundation model ─────────────────────────────────────────────
+print("\\n" + "=" * 70)
+print(f"FOUNDATION MODEL: {FOUNDATION_MODEL}")
+print("=" * 70)
 
 try:
     t0 = time.time()
-    model_cls = FOUNDATION_MODELS[fm_name]
+    model_cls = FOUNDATION_MODELS[FOUNDATION_MODEL]
 
-    if fm_name == "CausalFM":
-        checkpoint_path = "CausalFM-toolkit/checkpoints/best_model.pth"
+    if not model_cls.is_available():
+        raise RuntimeError(
+            f"{FOUNDATION_MODEL} is not available in this environment "
+            "(see the availability check in the previous cell)."
+        )
+
+    if FOUNDATION_MODEL == "CausalFM":
+        checkpoint_path = "CausalFM-toolkit/checkpoints/checkpoints_standard/best_model.pth"
         if not os.path.exists(checkpoint_path):
-            raise FileNotFoundError(f"CausalFM checkpoint not found at {checkpoint_path}")
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
         model = model_cls(checkpoint_path=checkpoint_path, device=device)
     else:
         model = model_cls(device=device)
 
     model.fit(X_train, T_train, Y_train)
-    tau_hat, lower, upper = model.predict(X_test)
+    tau_hat, _, _ = model.predict(X_test)
     runtime = time.time() - t0
     ate_hat = float(np.mean(tau_hat))
 
-    result = {
-        "model": fm_name + " (Foundation)",
-        "ate_hat": ate_hat,
-        "ate_true": ds.ate,
+    results.append({
+        "model": FOUNDATION_MODEL + " (Foundation)",
+        "ate_hat": ate_hat, "ate_true": ds.ate,
         "ate_abs_error": abs(ate_hat - ds.ate),
         "ate_rel_error": abs(ate_hat - ds.ate) / (abs(ds.ate) + 1e-8),
         "runtime_s": runtime,
-    }
-    results.append(result)
-    print(f"  {fm_name:25s}: ATE_error={result['ate_abs_error']:.4f}, runtime={runtime:.2f}s")
+    })
+    print(f"  {FOUNDATION_MODEL:25s}: ATE_error={abs(ate_hat-ds.ate):.1f}  runtime={runtime:.2f}s")
+
 except Exception as e:
-    print(f"  {fm_name:25s}: ERROR: {e}")
     import traceback
+    print(f"  {FOUNDATION_MODEL:25s}: ERROR")
     traceback.print_exc()
 
-print("\\n" + "="*70)"""),
+print("\\n" + "=" * 70)"""),
 
     md("## 5. Results Table"),
 
@@ -460,8 +343,7 @@ print("Saved to lalonde_benchmark.png")"""),
 Foundation models may have learned causal relationships from their training priors that help here."""),
 ]
 
-save(nb, "02_lalonde_benchmark.ipynb")
+save(nb, "Lalonde_benchmark.ipynb")
 
-print("\\nAll notebooks built successfully!")
-print(f"Generated: {os.path.join(OUT_DIR, '01_interactive_model_demo.ipynb')}")
-print(f"Generated: {os.path.join(OUT_DIR, '02_lalonde_benchmark.ipynb')}")
+print("\nAll notebooks built successfully!")
+print(f"Generated: {os.path.join(OUT_DIR, 'Lalonde_benchmark.ipynb')}")

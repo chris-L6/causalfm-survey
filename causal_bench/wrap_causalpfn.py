@@ -13,6 +13,7 @@ The first call downloads pretrained weights from the Hugging Face Hub
 """
 
 from __future__ import annotations
+import platform
 import time
 import numpy as np
 from typing import Optional, Tuple
@@ -30,6 +31,13 @@ class CausalPFNWrapper:
 
     @classmethod
     def is_available(cls) -> bool:
+        # CausalPFN segfaults on Apple Silicon macOS -- a hard process crash,
+        # not a catchable exception -- on both CPU and MPS (likely an
+        # unstable scaled_dot_product_attention kernel, not a CUDA
+        # requirement). Report unavailable here rather than let `fit()`
+        # crash the interpreter. Fine on Colab (CPU or GPU).
+        if platform.system() == "Darwin" and platform.machine() == "arm64":
+            return False
         try:
             from causalpfn import CATEEstimator, ATEEstimator  # noqa: F401
             return True

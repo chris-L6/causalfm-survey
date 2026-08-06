@@ -33,29 +33,29 @@ uv sync
 pip install -r requirements.txt
 ```
 
-### 2. Interactive Demo (recommended first step)
+### 2. Foundation Models Quickstart (recommended first step)
 
 ```bash
-jupyter notebook notebooks/01_interactive_model_demo.ipynb
+jupyter notebook notebooks/Foundation_models_quickstart.ipynb
 ```
 
-Choose any model + dataset (synthetic or Lalonde) via widgets and run it end-to-end. See PEHE, ATE error, runtime.
+The fastest path to one working causal foundation model: install, fit, predict — done. Covers **CausalPFN** alone, end to end, called through its own native API (no wrapper abstraction), so every cell is exactly what you'd write in your own project.
 
-### 3. Lalonde Benchmark
+### 3. Foundation Models Sandbox (all three models, side by side)
 
 ```bash
-jupyter notebook notebooks/02_lalonde_benchmark.ipynb
+jupyter notebook notebooks/Foundation_models_sandbox.ipynb
 ```
 
-Compare one foundation model against all six metalearners on the Lalonde real-world benchmark.
+A playground/sandbox notebook, not a quickstart. Runs all three causal foundation models (CausalPFN, Do-PFN, CausalFM) side by side on one dataset, each called through its own native API. It's checked into git to preserve the observations, caveats, and gotchas (version pins, macOS segfaults, checkpoint paths, etc.) found while exploring all three. Includes a "Reference output" section with real numbers and a plot from a verified run, so you can check your own results against a known-good one.
 
-### 4. Setup & Explore Datasets
+### 4. Lalonde Benchmark
 
 ```bash
-jupyter notebook notebooks/00_setup_and_data.ipynb
+jupyter notebook notebooks/Lalonde_benchmark.ipynb
 ```
 
-Generate and visualize the four synthetic datasets used across all models.
+Compare one foundation model against all six metalearners on the Lalonde real-world benchmark, using this repo's `causal_bench` wrappers.
 
 ## Repository Structure
 
@@ -71,11 +71,11 @@ Generate and visualize the four synthetic datasets used across all models.
 │   ├── wrap_causalfm.py                    # CausalFM wrapper
 │   └── wrap_metalearners.py                # S/T/X-learner, Debiased ML, IPW, DR wrappers
 ├── notebooks/
-│   ├── 00_setup_and_data.ipynb             # Setup + synthetic dataset generation
-│   ├── 01_interactive_model_demo.ipynb     # Choose model & dataset, run interactively
-│   └── 02_lalonde_benchmark.ipynb          # Compare foundation model vs. metalearners on Lalonde
+│   ├── Foundation_models_quickstart.ipynb  # CausalPFN alone, end to end (hand-maintained)
+│   ├── Foundation_models_sandbox.ipynb     # All 3 foundation models side by side (hand-maintained)
+│   └── Lalonde_benchmark.ipynb             # Foundation model vs. metalearners, via causal_bench
 ├── scripts/
-│   └── build_new_notebooks.py              # Regenerate notebooks from template
+│   └── build_new_notebooks.py              # Regenerates Lalonde_benchmark.ipynb
 ├── requirements.txt                        # Dependencies (numpy, pandas, torch, econml, causalml, etc.)
 ├── pyproject.toml                          # uv configuration
 ├── CLAUDE.md                               # Development guide

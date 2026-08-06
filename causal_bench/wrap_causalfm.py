@@ -16,7 +16,7 @@ Per the toolkit's quick-start example:
     from causalfm.models import StandardCATEModel
     from causalfm.evaluation import compute_pehe
 
-    model = StandardCATEModel.from_pretrained("checkpoints/best_model.pth")
+    model = StandardCATEModel.from_pretrained("checkpoints/checkpoints_standard/best_model.pth")
     result = model.estimate_cate(x_train, a_train, y_train, x_test)
     cate = result['cate']
 
