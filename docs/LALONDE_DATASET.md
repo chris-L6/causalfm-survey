@@ -126,6 +126,33 @@ units) rather than being fit fresh to it like the metalearners are.
 The untrimmed `variant="nsw_psid"` (the default if you don't pass `variant=`)
 is still available if you want the original, maximally-hard comparison.
 
+## Verified reference run (Colab, GPU) — all 9 models
+
+The table above only had 6 metalearners + Do-PFN + CausalFM (CausalPFN can't
+run locally on Apple Silicon — see CLAUDE.md). Here's a full run of all 9
+models on `nsw_psid_trimmed`, from Colab with a GPU runtime, matching the
+"Reference output" section in `Lalonde_benchmark.ipynb` itself:
+
+| Model | ATE_hat | ATE_true | ATE_abs_error | ATE_rel_error | Runtime (s) |
+|---|---|---|---|---|---|
+| S-learner | $150 | $1,794 | $1,645 | 0.92 | 0.57 |
+| Do-PFN (Foundation) | $4,222 | $1,794 | $2,428 | 1.35 | 4.97 |
+| CausalFM (Foundation) | -$926 | $1,794 | $2,720 | 1.52 | 0.32 |
+| CausalPFN (Foundation) | -$2,553 | $1,794 | $4,347 | 2.42 | 5.51 |
+| Debiased ML | -$3,079 | $1,794 | $4,873 | 2.72 | 0.88 |
+| T-learner / IPW | -$3,774 | $1,794 | $5,568 | 3.10 | 0.57–0.70 |
+| DR (Doubly Robust) | -$4,014 | $1,794 | $5,808 | 3.24 | 0.68 |
+| X-learner | -$4,176 | $1,794 | $5,970 | 3.33 | 0.97 |
+
+![Reference plot: ATE error and runtime, foundation models vs. metalearners](../notebooks/assets/lalonde_reference_output_colab.png)
+
+S-learner is the most accurate model in this run, and the only one within
+the same order of magnitude as the true effect. Do-PFN and CausalFM both
+beat most metalearners; CausalPFN lands in between. Every metalearner
+except S-learner underestimates by a similar amount (roughly -$3,800 to
+-$4,200) — consistent with all of them reacting to the same remaining
+confounding in the trimmed sample rather than failing independently.
+
 ## Practical takeaway
 
 If you extend this benchmark to other real-world datasets: check whether
