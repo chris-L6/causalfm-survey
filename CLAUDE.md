@@ -54,12 +54,12 @@ jupyter notebook notebooks/Foundation_models_quickstart.ipynb
 - Covers **CausalPFN** alone, end to end: install, fit, predict. Standalone — calls CausalPFN's native API directly, not this repo's wrapper classes, so any cell can be copied into another project as-is.
 - Deliberately narrow (one model, one dataset) — see the sandbox notebook below for a three-model comparison.
 
-**2. Lalonde Benchmark** (compare foundation model vs. all metalearners):
+**2. Lalonde Benchmark** (compare all foundation models vs. all metalearners):
 ```bash
 jupyter notebook notebooks/Lalonde_benchmark.ipynb
 ```
-- Select one foundation model (CausalPFN / Do-PFN / CausalFM) via the `FOUNDATION_MODEL` variable
-- Automatically runs all 6 metalearners + selected foundation model on Lalonde
+- Runs all 3 foundation models (CausalPFN, Do-PFN, CausalFM) + all 6 metalearners on Lalonde, no selection needed
+- Each model runs independently — an unavailable or erroring model is skipped/reported without blocking the rest
 - Uses `causal_bench` wrappers (unlike the other two notebooks, which call each library's native API directly)
 - Produces results table (ATE error, relative error, runtime) and bar chart
 
@@ -147,8 +147,8 @@ class *Wrapper:
 - Not built by `scripts/build_new_notebooks.py`; hand-maintained like the sandbox notebook below, since it doesn't share the Lalonde notebook's wrapper-based structure
 
 **`Lalonde_benchmark.ipynb`** — Real-world comparison, uses `causal_bench`
-- Select one foundation model via the `FOUNDATION_MODEL` variable
-- Automatically runs all 6 metalearners + foundation model on Lalonde
+- Automatically runs all 3 foundation models + all 6 metalearners on Lalonde, no selection needed
+- Unavailable/erroring models are skipped/reported per-model, without blocking the rest
 - Produces results table (ATE error, runtime) and bar charts
 - Built by `scripts/build_new_notebooks.py` — edit the script, not the `.ipynb`, then regenerate
 

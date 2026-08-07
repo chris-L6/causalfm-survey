@@ -55,7 +55,7 @@ A playground/sandbox notebook, not a quickstart. Runs all three causal foundatio
 jupyter notebook notebooks/Lalonde_benchmark.ipynb
 ```
 
-Compare one foundation model against all six metalearners on the Lalonde real-world benchmark, using this repo's `causal_bench` wrappers.
+Compare all three foundation models against all six metalearners on the Lalonde real-world benchmark, using this repo's `causal_bench` wrappers. Each model runs independently — one failing or unavailable doesn't block the rest.
 
 ## Repository Structure
 

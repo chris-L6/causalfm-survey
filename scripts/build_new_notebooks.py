@@ -3,7 +3,7 @@ Builds the Lalonde benchmark notebook using nbformat.
 Run: python3 scripts/build_new_notebooks.py
 
 Generates:
-- Lalonde_benchmark.ipynb (all 6 metalearners + 1 selected foundation model on Lalonde)
+- Lalonde_benchmark.ipynb (all 6 metalearners + all 3 foundation models on Lalonde)
 """
 import nbformat as nbf
 import os
@@ -43,13 +43,15 @@ nb.cells = [
 
 {colab_badge('notebooks/Lalonde_benchmark.ipynb')}
 
-**Compare one foundation model against traditional metalearners on the Lalonde dataset.**
+**Compare all foundation models against all traditional metalearners on the Lalonde dataset.**
 
 This notebook runs:
-- 1 foundation model (choose: CausalPFN / Do-PFN / CausalFM)
+- 3 foundation models (CausalPFN, Do-PFN, CausalFM)
 - 6 metalearners (S-learner, T-learner, X-learner, Debiased ML, IPW, DR)
 
-on the Lalonde real-world causal inference benchmark and produces a comparison table."""),
+on the Lalonde real-world causal inference benchmark and produces a comparison table. Each
+model runs independently and failures don't block the rest — unavailable or erroring
+models are reported and skipped."""),
 
     md("## 1. Setup"),
 
@@ -175,15 +177,9 @@ T_train, Y_train = ds.T[train_idx], ds.Y[train_idx]
 
 print(f"  train: n={len(train_idx)}, test: n={len(test_idx)}")"""),
 
-    md("""## 3. Select Foundation Model
+    md("## 3. Foundation Model Availability"),
 
-**Change `FOUNDATION_MODEL` below, then run this cell and the next one.**"""),
-
-    code("""# ── EDIT THIS LINE ────────────────────────────────────────────────────────────
-FOUNDATION_MODEL = "CausalPFN"   # CausalPFN | Do-PFN | CausalFM
-# ──────────────────────────────────────────────────────────────────────────────
-
-from causal_bench import CausalPFNWrapper, DoPFNWrapper, CausalFMWrapper
+    code("""from causal_bench import CausalPFNWrapper, DoPFNWrapper, CausalFMWrapper
 
 FOUNDATION_MODELS = {
     "CausalPFN": CausalPFNWrapper,
@@ -194,10 +190,7 @@ FOUNDATION_MODELS = {
 print("Foundation model availability:")
 for name, cls in FOUNDATION_MODELS.items():
     print(f"  {'✓' if cls.is_available() else '✗'}  {name}")
-
-assert FOUNDATION_MODEL in FOUNDATION_MODELS, \\
-    f"Unknown model {FOUNDATION_MODEL!r}. Choose from: {list(FOUNDATION_MODELS)}"
-print(f"\\nSelected: {FOUNDATION_MODEL!r}  |  device: {device}")"""),
+print(f"\\ndevice: {device}")"""),
 
     md("## 4. Run All Models"),
 
@@ -243,47 +236,40 @@ for name, model_cls in METALEARNERS.items():
     except Exception as e:
         print(f"  {name:25s}: ERROR: {e}")
 
-# ── Run selected foundation model ─────────────────────────────────────────────
+# ── Run all foundation models ─────────────────────────────────────────────────
 print("\\n" + "=" * 70)
-print(f"FOUNDATION MODEL: {FOUNDATION_MODEL}")
+print("FOUNDATION MODELS")
 print("=" * 70)
-
-try:
-    t0 = time.time()
-    model_cls = FOUNDATION_MODELS[FOUNDATION_MODEL]
-
+for fm_name, model_cls in FOUNDATION_MODELS.items():
     if not model_cls.is_available():
-        raise RuntimeError(
-            f"{FOUNDATION_MODEL} is not available in this environment "
-            "(see the availability check in the previous cell)."
-        )
+        print(f"  {fm_name:25s}: SKIPPED (not available in this environment)")
+        continue
+    try:
+        t0 = time.time()
 
-    if FOUNDATION_MODEL == "CausalFM":
-        checkpoint_path = "CausalFM-toolkit/checkpoints/checkpoints_standard/best_model.pth"
-        if not os.path.exists(checkpoint_path):
-            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
-        model = model_cls(checkpoint_path=checkpoint_path, device=device)
-    else:
-        model = model_cls(device=device)
+        if fm_name == "CausalFM":
+            checkpoint_path = "CausalFM-toolkit/checkpoints/checkpoints_standard/best_model.pth"
+            if not os.path.exists(checkpoint_path):
+                raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+            model = model_cls(checkpoint_path=checkpoint_path, device=device)
+        else:
+            model = model_cls(device=device)
 
-    model.fit(X_train, T_train, Y_train)
-    tau_hat, _, _ = model.predict(X_test)
-    runtime = time.time() - t0
-    ate_hat = float(np.mean(tau_hat))
+        model.fit(X_train, T_train, Y_train)
+        tau_hat, _, _ = model.predict(X_test)
+        runtime = time.time() - t0
+        ate_hat = float(np.mean(tau_hat))
 
-    results.append({
-        "model": FOUNDATION_MODEL + " (Foundation)",
-        "ate_hat": ate_hat, "ate_true": ds.ate,
-        "ate_abs_error": abs(ate_hat - ds.ate),
-        "ate_rel_error": abs(ate_hat - ds.ate) / (abs(ds.ate) + 1e-8),
-        "runtime_s": runtime,
-    })
-    print(f"  {FOUNDATION_MODEL:25s}: ATE_error={abs(ate_hat-ds.ate):.1f}  runtime={runtime:.2f}s")
-
-except Exception as e:
-    import traceback
-    print(f"  {FOUNDATION_MODEL:25s}: ERROR")
-    traceback.print_exc()
+        results.append({
+            "model": fm_name + " (Foundation)",
+            "ate_hat": ate_hat, "ate_true": ds.ate,
+            "ate_abs_error": abs(ate_hat - ds.ate),
+            "ate_rel_error": abs(ate_hat - ds.ate) / (abs(ds.ate) + 1e-8),
+            "runtime_s": runtime,
+        })
+        print(f"  {fm_name:25s}: ATE_error={abs(ate_hat-ds.ate):.1f}  runtime={runtime:.2f}s")
+    except Exception as e:
+        print(f"  {fm_name:25s}: ERROR: {e}")
 
 print("\\n" + "=" * 70)"""),
 
