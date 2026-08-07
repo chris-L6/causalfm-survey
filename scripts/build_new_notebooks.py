@@ -53,7 +53,14 @@ on the Lalonde real-world causal inference benchmark and produces a comparison t
 model runs independently and failures don't block the rest — unavailable or erroring
 models are reported and skipped."""),
 
-    md("## 1. Setup"),
+    md("""## 1. Setup
+
+On Colab, re-running this notebook in a runtime that already ran it before
+pulls the latest repo code automatically -- but if you'd already run a cell
+that imports `causal_bench` earlier in that same session, Python's module
+cache means the pull alone won't update what's in memory. If you see
+results that don't match what you expect after a repo update, use
+**Runtime > Restart session** and run all cells again from the top."""),
 
     code("""import os, sys, subprocess
 
@@ -81,10 +88,21 @@ if IN_COLAB:
                 "Fix: set GITHUB_TOKEN above (github.com/settings/tokens, scope: repo→read).\\n"
                 f"Error: {result.stderr.strip()}"
             )
+    else:
+        # Runtime already has a clone from a previous run in this session --
+        # pull latest so re-running doesn't silently keep stale repo code.
+        result = subprocess.run(["git", "-C", REPO_DIR, "pull"], capture_output=True, text=True)
+        print(result.stdout.strip() or result.stderr.strip())
     sys.path.insert(0, REPO_DIR)
 else:
     sys.path.insert(0, os.path.abspath(".."))
 
+if "causal_bench" in sys.modules:
+    print("⚠ causal_bench was already imported earlier in this session -- "
+          "Python caches modules in memory, so a git pull above does NOT "
+          "make this cell pick up code changes. If you're re-running this "
+          "notebook after a repo update, use Runtime > Restart session, "
+          "then run all cells again from the top.")
 import causal_bench
 print("causal_bench imported from:", causal_bench.__file__)"""),
 
