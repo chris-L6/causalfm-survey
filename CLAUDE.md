@@ -171,7 +171,7 @@ class *Wrapper:
 ### Datasets
 
 - **`iv_binary` / `frontdoor`**: Intentionally violate unconfoundedness-given-X. Methods that assume unconfoundedness will be biased (expected behavior, used to test robustness).
-- **Lalonde**: Real-world data with no ground-truth *CATE*, but `load_lalonde()` does supply a true experimental *ATE* (`ds.ate`, ~$1,794) from a randomized comparison that's separate from the (X, T, Y) fed to models — see `causal_bench/data_loader.py` for why, and the wrapper-standardization note below for why that matters for scoring foundation models fairly on it.
+- **Lalonde**: Real-world data with no ground-truth *CATE*, but `load_lalonde()` does supply a true experimental *ATE* (`ds.ate`, ~$1,794) from a randomized comparison that's separate from the (X, T, Y) fed to models — see `causal_bench/data_loader.py` for why, and the wrapper-standardization note below for why that matters for scoring foundation models fairly on it. Full explanation: [`docs/LALONDE_DATASET.md`](docs/LALONDE_DATASET.md).
 
 ### Models & dependencies
 
