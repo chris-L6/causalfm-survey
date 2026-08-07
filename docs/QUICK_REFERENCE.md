@@ -72,7 +72,7 @@ metrics = evaluate_cate(tau_hat, ds.tau[test_idx])
 ```python
 from causal_bench import load_lalonde, SLearnerWrapper, TLearnerWrapper
 
-ds = load_lalonde()
+ds = load_lalonde("nsw_psid_trimmed")  # or "nsw_psid" for the untrimmed, harder pairing
 print(f"true ATE: {ds.ate:.2f}  (naive confounded diff: {ds.ate_naive_observed:.2f})")
 train_idx, test_idx = ds.train_test_split(0.7, seed=0)
 

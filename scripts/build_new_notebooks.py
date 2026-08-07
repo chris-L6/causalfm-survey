@@ -196,16 +196,23 @@ if IN_COLAB:
     get_ipython().system('pip install -q networkx tqdm einops "tabpfn==2.0.9" tensorboard')
 # Locally: uv pip install networkx tqdm einops "tabpfn==2.0.9" tensorboard"""),
 
-    md("## 2. Load Lalonde Dataset"),
+    md("""## 2. Load Lalonde Dataset
+
+Uses `variant="nsw_psid_trimmed"`: NSW-treated vs. PSID-controls restricted
+to common propensity-score support (see `docs/LALONDE_DATASET.md`). The
+untrimmed `"nsw_psid"` pairing has almost no covariate overlap between
+groups at all, which defeats every method here by construction, not just
+the weaker ones -- trimming gives a real, if still hard, estimation task."""),
 
     code("""from causal_bench import load_lalonde, evaluate_cate
 
-print("Loading Lalonde dataset...")
-ds = load_lalonde()
-print(f"  n={len(ds.Y)}, X.shape={ds.X.shape}")
+print("Loading Lalonde dataset (common-support trimmed)...")
+ds = load_lalonde("nsw_psid_trimmed")
+print(f"  n={len(ds.Y)}, X.shape={ds.X.shape}  "
+      f"({ds.meta['n_dropped_by_trimming']} PSID-control units dropped for lacking overlap)")
 print(f"  True experimental ATE (NSW-treated vs. NSW-control, scored against): {ds.ate:.3f}")
-print(f"  Naive observed diff on X/T/Y itself (NSW-treated vs. PSID-controls, "
-      f"confounded): {ds.ate_naive_observed:.3f}")
+print(f"  Naive observed diff on X/T/Y itself (still confounded, just less "
+      f"extremely so post-trimming): {ds.ate_naive_observed:.3f}")
 
 train_idx, test_idx = ds.train_test_split(0.7, seed=0)
 X_train, X_test = ds.X[train_idx], ds.X[test_idx]
@@ -367,11 +374,14 @@ confounded X/T/Y models actually see), so ATE error here is a genuine accuracy m
 just distance from a naive number. Individual-level CATE still has no ground truth on real
 data — only ATE is checkable.
 
-**Selection bias is severe in the X/T/Y models see**: NSW-treated vs. PSID-controls is the
-classic hard case (LaLonde 1986) precisely because the naive diff-in-means on that data
-(`ds.ate_naive_observed`, printed above) is wildly biased relative to the true experimental
-ATE — recovering the true effect from it is a real test of confounder adjustment, not a
-given."""),
+**Selection bias is still real, even after trimming**: the naive diff-in-means on the X/T/Y
+models see (`ds.ate_naive_observed`, printed above) remains far from the true ATE even on
+the common-support-trimmed sample — trimming removes PSID-control units with *no* comparable
+treated unit at all (an impossible-by-construction problem), it doesn't eliminate confounding
+among the units that remain. Recovering the true effect is still a real test of confounder
+adjustment; see `docs/LALONDE_DATASET.md` for the untrimmed comparison, where the covariate
+overlap is so poor that practically every method here gets the *sign* of the effect wrong,
+not just the magnitude."""),
 ]
 
 save(nb, "Lalonde_benchmark.ipynb")

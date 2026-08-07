@@ -25,6 +25,19 @@ diff-in-means computed from the confounded (X, T, Y) models actually see —
 that naive number (~-$15,205, driven almost entirely by selection bias, not
 treatment effect) is exposed separately as `ds.ate_naive_observed` so it's
 visible just how badly an unadjusted comparison is distorted here.
+
+**Overlap**: NSW-treated and the full PSID-controls sample barely overlap at
+all — verified directly (`age`, `married`, `nodegree`, `re74`, `re75` means
+are wildly different between groups; PSID controls are, on average, 9 years
+older, mostly married vs. mostly not, and earn ~9x more pre-treatment). This
+is why practically every estimator applied to the untrimmed `nsw_psid`
+variant gets the *sign* of the effect wrong, not just the magnitude — it
+matches Dehejia & Wahba's own published "PSID-1" result. `variant="nsw_psid_trimmed"`
+restricts PSID-controls to common propensity-score support with the treated
+group (fit `p(treat=1|X)` on the pooled sample, keep only control units whose
+score falls within the range observed among treated units — the standard
+common-support trimming approach), giving methods an estimation task that
+isn't defeated by construction.
 """
 
 from __future__ import annotations
@@ -46,6 +59,9 @@ _NSW_TREATED_URL = _NBER_BASE + "nswre74_treated.txt"
 _NBER_FILES = {
     "nsw_psid": _NBER_BASE + "psid_controls.txt",
 }
+# "nsw_psid_trimmed" reuses "nsw_psid"'s raw data with common-support trimming
+# applied -- see _trim_to_common_support.
+_TRIMMED_SUFFIX = "_trimmed"
 # Randomized-experiment control group -- used only to compute the true `ate`.
 _NSW_EXPERIMENTAL_CONTROL_URL = _NBER_BASE + "nswre74_control.txt"
 
@@ -88,19 +104,65 @@ def _load_group(url: str, cache_name: str) -> pd.DataFrame:
     return df
 
 
+def _trim_to_common_support(df: pd.DataFrame) -> pd.DataFrame:
+    """Restrict control units to the propensity-score range observed among
+    the treated units (standard common-support trimming): fit p(treat=1|X)
+    on the pooled sample, then drop any control unit whose score falls
+    outside [min, max] of the treated units' scores -- those controls have
+    no comparable treated unit to be compared against at all."""
+    import warnings
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.preprocessing import StandardScaler
+
+    X = df[_FEATURE_COLS].values.astype(np.float32)
+    T = df[_TREATMENT_COL].values.astype(np.float32)
+    # re74/re75 are in the thousands vs. age/educ in the tens -- without
+    # standardizing, LogisticRegression's lbfgs solver overflows badly
+    # enough to not converge at all (verified directly).
+    X_s = StandardScaler().fit_transform(X)
+
+    propensity_model = LogisticRegression(max_iter=1000)
+    # NSW-treated and PSID-controls are separable enough on some covariates
+    # (e.g. re74/re75) that exp() overflows internally for the most extreme
+    # units -- harmless: it still saturates to the correct ~0/~1 probability
+    # (verified: no NaNs in the output), which is exactly what should happen
+    # for units with no comparable match. Silence the resulting noise.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        propensity_model.fit(X_s, T)
+        p = propensity_model.predict_proba(X_s)[:, 1]
+
+    treated_mask = T == 1
+    lo, hi = p[treated_mask].min(), p[treated_mask].max()
+    keep = treated_mask | ((p >= lo) & (p <= hi))
+    return df[keep].reset_index(drop=True)
+
+
 def load_lalonde(variant: str = "nsw_psid") -> LalondeDataset:
     """
     Load Lalonde dataset: NSW-treated + PSID-controls (by default) as the
     (X, T, Y) estimation task, and separately the NSW-treated + NSW-control
     randomized comparison to compute the true `ate` to score against.
+
+    variant="nsw_psid_trimmed" applies common-support trimming to the PSID
+    controls first (see _trim_to_common_support) -- use this if you want an
+    estimation task that isn't defeated by near-zero covariate overlap.
     """
-    control_url = _NBER_FILES.get(variant)
+    trimmed = variant.endswith(_TRIMMED_SUFFIX)
+    base_variant = variant[: -len(_TRIMMED_SUFFIX)] if trimmed else variant
+    control_url = _NBER_FILES.get(base_variant)
     if control_url is None:
-        raise ValueError(f"Unknown Lalonde variant '{variant}'. Choose from: {list(_NBER_FILES)}")
+        available = list(_NBER_FILES) + [v + _TRIMMED_SUFFIX for v in _NBER_FILES]
+        raise ValueError(f"Unknown Lalonde variant '{variant}'. Choose from: {available}")
 
     treated = _load_group(_NSW_TREATED_URL, "lalonde_nsw_treated.csv")
-    control = _load_group(control_url, f"lalonde_{variant}_control.csv")
+    control = _load_group(control_url, f"lalonde_{base_variant}_control.csv")
     df = pd.concat([treated, control], ignore_index=True)
+
+    n_before_trim = len(df)
+    if trimmed:
+        df = _trim_to_common_support(df)
+    n_dropped_by_trimming = n_before_trim - len(df)
 
     X = df[_FEATURE_COLS].values.astype(np.float32)
     T = df[_TREATMENT_COL].values.astype(np.float32)
@@ -121,6 +183,7 @@ def load_lalonde(variant: str = "nsw_psid") -> LalondeDataset:
             n_samples=len(Y),
             n_features=X.shape[1],
             feature_names=_FEATURE_COLS,
+            n_dropped_by_trimming=n_dropped_by_trimming,
             notes=(
                 "X/T/Y are NSW-treated vs. PSID-controls (observational, "
                 "confounded by design). `ate` is the true experimental "
@@ -129,6 +192,12 @@ def load_lalonde(variant: str = "nsw_psid") -> LalondeDataset:
                 "`ate_naive_observed` is the naive diff-in-means on X/T/Y "
                 "itself, exposed to show the scale of the selection bias a "
                 "method needs to correct for."
+                + (
+                    f" Common-support trimming dropped {n_dropped_by_trimming} "
+                    f"PSID-control units with no propensity-score overlap "
+                    f"with any treated unit."
+                    if trimmed else ""
+                )
             ),
         ),
     )
@@ -141,4 +210,5 @@ def list_available_datasets() -> list:
         "iv_binary",
         "frontdoor",
         "lalonde_nsw_psid",
+        "lalonde_nsw_psid_trimmed",
     ]
