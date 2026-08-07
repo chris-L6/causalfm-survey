@@ -55,16 +55,33 @@ models are reported and skipped."""),
 
     md("""## 1. Setup
 
-On Colab, re-running this notebook in a runtime that already ran it before
-pulls the latest repo code automatically -- but if you'd already run a cell
-that imports `causal_bench` earlier in that same session, Python's module
-cache means the pull alone won't update what's in memory. If you see
-results that don't match what you expect after a repo update, use
-**Runtime > Restart session** and run all cells again from the top."""),
+If this is a fresh runtime, just run this cell normally. If you're
+re-running the notebook in a runtime that already ran it before (e.g. after
+a repo update), this cell detects that `causal_bench` was already imported
+earlier in the session and restarts automatically on Colab -- Python caches
+imported modules in memory, so a `git pull` alone can't make an
+already-running session pick up code changes; only a restart can. Just
+re-run this cell once it reconnects, then continue from the top."""),
 
     code("""import os, sys, subprocess
 
 IN_COLAB = "google.colab" in sys.modules
+
+# Python caches imported modules -- if causal_bench is already loaded, no
+# amount of re-cloning/pulling below will change what's in memory. Restart
+# is the only fix (Colab: automatic; locally: this cell raises instead).
+if "causal_bench" in sys.modules:
+    msg = ("causal_bench was already imported earlier in this session -- a repo "
+           "update (e.g. git pull below) can't refresh an already-loaded module, "
+           "so continuing would risk confusing errors (like an AttributeError on "
+           "a field that exists in the current code but not in memory).")
+    if IN_COLAB:
+        print(msg + " Restarting the session now -- re-run this cell once it "
+              "reconnects, then continue from the top.")
+        os.kill(os.getpid(), 9)  # Colab reconnects automatically with a fresh process
+    else:
+        raise RuntimeError(msg + " Restart the kernel (Kernel/Restart), then "
+                            "run all cells again from the top.")
 
 # ── FOR COLAB ONLY: set your GitHub token if the repo is private ──────────────
 # Create one at: github.com/settings/tokens  (scope: repo → read)
@@ -89,20 +106,15 @@ if IN_COLAB:
                 f"Error: {result.stderr.strip()}"
             )
     else:
-        # Runtime already has a clone from a previous run in this session --
-        # pull latest so re-running doesn't silently keep stale repo code.
+        # Shouldn't normally get here -- the causal_bench check above already
+        # forces a restart before a stale clone could be reused. Pull anyway
+        # in case the clone exists but causal_bench was never imported yet.
         result = subprocess.run(["git", "-C", REPO_DIR, "pull"], capture_output=True, text=True)
         print(result.stdout.strip() or result.stderr.strip())
     sys.path.insert(0, REPO_DIR)
 else:
     sys.path.insert(0, os.path.abspath(".."))
 
-if "causal_bench" in sys.modules:
-    print("⚠ causal_bench was already imported earlier in this session -- "
-          "Python caches modules in memory, so a git pull above does NOT "
-          "make this cell pick up code changes. If you're re-running this "
-          "notebook after a repo update, use Runtime > Restart session, "
-          "then run all cells again from the top.")
 import causal_bench
 print("causal_bench imported from:", causal_bench.__file__)"""),
 
