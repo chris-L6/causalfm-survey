@@ -16,6 +16,7 @@ from __future__ import annotations
 import platform
 import time
 import numpy as np
+from sklearn.preprocessing import StandardScaler
 from typing import Optional, Tuple
 
 
@@ -28,6 +29,8 @@ class CausalPFNWrapper:
         self._available = None
         self._cate_estimator = None
         self._ate_estimator = None
+        self._x_scaler = None
+        self._y_scaler = None
 
     @classmethod
     def is_available(cls) -> bool:
@@ -45,17 +48,28 @@ class CausalPFNWrapper:
             return False
 
     def fit(self, X: np.ndarray, T: np.ndarray, Y: np.ndarray):
+        """Standardizes X and Y before fitting -- CausalPFN is pretrained on
+        normalized synthetic priors, and raw real-world scales (e.g. Lalonde's
+        dollar-denominated features/outcome) are out of that distribution.
+        Only a linear rescaling, so CATE/ATE are converted back to the
+        original outcome scale in `predict`/`estimate_ate` (multiply by
+        Y's std -- the mean cancels out in a difference of group means)."""
         from causalpfn import CATEEstimator, ATEEstimator
 
         X = np.asarray(X, dtype=np.float32)
         T = np.asarray(T, dtype=np.float32)
         Y = np.asarray(Y, dtype=np.float32)
 
+        self._x_scaler = StandardScaler().fit(X)
+        self._y_scaler = StandardScaler().fit(Y.reshape(-1, 1))
+        X_s = self._x_scaler.transform(X).astype(np.float32)
+        Y_s = self._y_scaler.transform(Y.reshape(-1, 1)).reshape(-1).astype(np.float32)
+
         self._cate_estimator = CATEEstimator(device=self.device, verbose=self.verbose)
-        self._cate_estimator.fit(X, T, Y)
+        self._cate_estimator.fit(X_s, T, Y_s)
 
         self._ate_estimator = ATEEstimator(device=self.device, verbose=self.verbose)
-        self._ate_estimator.fit(X, T, Y)
+        self._ate_estimator.fit(X_s, T, Y_s)
         return self
 
     def predict(self, X: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]:
@@ -63,13 +77,15 @@ class CausalPFNWrapper:
         CausalPFN's installed version does not expose them through this
         call -- see its docs for `estimate_cate` with `return_quantiles`."""
         X = np.asarray(X, dtype=np.float32)
-        tau_hat = self._cate_estimator.estimate_cate(X)
-        return np.asarray(tau_hat).reshape(-1), None, None
+        X_s = self._x_scaler.transform(X).astype(np.float32)
+        tau_hat_s = np.asarray(self._cate_estimator.estimate_cate(X_s)).reshape(-1)
+        tau_hat = tau_hat_s * self._y_scaler.scale_[0]
+        return tau_hat, None, None
 
     def estimate_ate(self, X: np.ndarray, T: np.ndarray, Y: np.ndarray) -> float:
-        # ATEEstimator.fit was already called with full data in `fit`
-        ate_hat = self._ate_estimator.estimate_ate()
-        return float(np.asarray(ate_hat).reshape(-1)[0])
+        # ATEEstimator.fit was already called with (standardized) full data in `fit`
+        ate_hat_s = float(np.asarray(self._ate_estimator.estimate_ate()).reshape(-1)[0])
+        return ate_hat_s * self._y_scaler.scale_[0]
 
     def run(self, X_train, T_train, Y_train, X_test):
         """Convenience: fit on train and return (tau_hat_test, ate_hat, runtime)."""

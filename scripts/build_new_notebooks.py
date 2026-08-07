@@ -172,7 +172,10 @@ if IN_COLAB:
 
 print("Loading Lalonde dataset...")
 ds = load_lalonde()
-print(f"  n={len(ds.Y)}, X.shape={ds.X.shape}, observed ATE={ds.ate:.3f}")
+print(f"  n={len(ds.Y)}, X.shape={ds.X.shape}")
+print(f"  True experimental ATE (NSW-treated vs. NSW-control, scored against): {ds.ate:.3f}")
+print(f"  Naive observed diff on X/T/Y itself (NSW-treated vs. PSID-controls, "
+      f"confounded): {ds.ate_naive_observed:.3f}")
 
 train_idx, test_idx = ds.train_test_split(0.7, seed=0)
 X_train, X_test = ds.X[train_idx], ds.X[test_idx]
@@ -328,8 +331,17 @@ print("Saved to lalonde_benchmark.png")"""),
 - Foundation models: fast (forward pass only, no retraining)
 - Metalearners: slower (train separate models for each group)
 
-**Real data**: No ground-truth CATE available, only observed ATE (simple difference in means).
-Foundation models may have learned causal relationships from their training priors that help here."""),
+**Real data, real ground truth for ATE — but not for CATE**: `ds.ate` is the true experimental
+ATE from the randomized NSW-treated vs. NSW-control comparison (not computed from the
+confounded X/T/Y models actually see), so ATE error here is a genuine accuracy measure, not
+just distance from a naive number. Individual-level CATE still has no ground truth on real
+data — only ATE is checkable.
+
+**Selection bias is severe in the X/T/Y models see**: NSW-treated vs. PSID-controls is the
+classic hard case (LaLonde 1986) precisely because the naive diff-in-means on that data
+(`ds.ate_naive_observed`, printed above) is wildly biased relative to the true experimental
+ATE — recovering the true effect from it is a real test of confounder adjustment, not a
+given."""),
 ]
 
 save(nb, "Lalonde_benchmark.ipynb")

@@ -172,7 +172,7 @@ Each notebook includes an "Open in Colab" badge. Click it to run directly on Col
 ## Important Notes
 
 - **Synthetic datasets**: Ground-truth CATE available; full metrics (PEHE, bias, coverage) computed.
-- **Lalonde**: Real-world data; no ground-truth CATE. Only observed ATE available for comparison.
+- **Lalonde**: Real-world data; no ground-truth CATE, but `ds.ate` is a true experimental ATE (~$1,794) from a separate randomized comparison, not a naive diff-in-means on the (confounded) data models are actually scored on — see `ds.ate_naive_observed` for that naive number, and CLAUDE.md for the full explanation.
 - **Foundation models**: Fast (no per-dataset training). Do not re-train; just condition on data.
 - **Metalearners**: Traditional ML methods trained from scratch on each dataset.
 - **Missing dependencies**: Notebooks gracefully skip unavailable models (with warnings) rather than crashing.

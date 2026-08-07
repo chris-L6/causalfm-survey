@@ -43,6 +43,7 @@ import os
 import time
 import numpy as np
 import torch
+from sklearn.preprocessing import StandardScaler
 from typing import Optional, Tuple
 
 
@@ -60,6 +61,8 @@ class DoPFNWrapper:
         self.repo_dir = repo_dir
         self.device = device
         self._model = None
+        self._x_scaler = None
+        self._y_scaler = None
 
     @classmethod
     def is_available(cls, repo_dir: str = "Do-PFN") -> bool:
@@ -76,7 +79,12 @@ class DoPFNWrapper:
     def fit(self, X: np.ndarray, T: np.ndarray, Y: np.ndarray):
         """Builds the combined design matrix [T, X] -- treatment in column
         0, since `predict_cid` overwrites `X[:, 0]` internally regardless of
-        what's there at prediction time."""
+        what's there at prediction time. Standardizes X and Y (not T --
+        `predict_cid` sets that column to exactly 0/1, which must stay
+        untransformed) since Do-PFN is pretrained on normalized synthetic
+        priors; converted back to the original outcome scale in `predict`
+        by multiplying by Y's std (the mean cancels in a difference of
+        group means)."""
         import sys
         sys.path.insert(0, os.path.abspath(self.repo_dir))
         from scripts.transformer_prediction_interface import DoPFNRegressor
@@ -84,14 +92,19 @@ class DoPFNWrapper:
         X = np.asarray(X, dtype=np.float32)
         T = np.asarray(T, dtype=np.float32).reshape(-1, 1)
         Y = np.asarray(Y, dtype=np.float32)
-        X_full = np.concatenate([T, X], axis=1)
+
+        self._x_scaler = StandardScaler().fit(X)
+        self._y_scaler = StandardScaler().fit(Y.reshape(-1, 1))
+        X_s = self._x_scaler.transform(X).astype(np.float32)
+        Y_s = self._y_scaler.transform(Y.reshape(-1, 1)).reshape(-1).astype(np.float32)
+        X_full = np.concatenate([T, X_s], axis=1)
 
         _cwd = os.getcwd()
         os.chdir(self.repo_dir)
         try:
             self._model = DoPFNRegressor()
             self._model.show_progress = False
-            self._model.fit(X_full, Y)
+            self._model.fit(X_full, Y_s)
         finally:
             os.chdir(_cwd)
         return self
@@ -100,17 +113,19 @@ class DoPFNWrapper:
         """Returns (tau_hat, lower_95, upper_95) via Do-PFN's own
         `predict_cate`, which computes do(T=1) minus do(T=0) internally."""
         X = np.asarray(X, dtype=np.float32)
+        X_s = self._x_scaler.transform(X).astype(np.float32)
         # Column 0 is a placeholder -- predict_cate overwrites it internally.
-        X_full = np.concatenate([np.zeros((len(X), 1), dtype=np.float32), X], axis=1)
+        X_full = np.concatenate([np.zeros((len(X_s), 1), dtype=np.float32), X_s], axis=1)
 
         _cwd = os.getcwd()
         os.chdir(self.repo_dir)
         try:
-            tau_hat = np.asarray(
+            tau_hat_s = np.asarray(
                 self._model.predict_cate(torch.as_tensor(X_full))
             ).reshape(-1)
         finally:
             os.chdir(_cwd)
+        tau_hat = tau_hat_s * self._y_scaler.scale_[0]
         return tau_hat, None, None
 
     def run(self, X_train, T_train, Y_train, X_test):
