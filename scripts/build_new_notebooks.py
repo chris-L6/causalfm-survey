@@ -330,13 +330,15 @@ print("\\nSaved to lalonde_benchmark.csv")"""),
     md("## 6. Visualization"),
 
     code("""import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
+FOUNDATION_COLOR, METALEARNER_COLOR = '#1f77b4', '#ff7f0e'
 fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
 # ATE error comparison
 ax = axes[0]
 df_plot = df_sorted.copy()
-colors = ['#1f77b4' if 'Foundation' in name else '#ff7f0e' for name in df_plot['model']]
+colors = [FOUNDATION_COLOR if 'Foundation' in name else METALEARNER_COLOR for name in df_plot['model']]
 ax.barh(range(len(df_plot)), df_plot['ate_abs_error'], color=colors)
 ax.set_yticks(range(len(df_plot)))
 ax.set_yticklabels(df_plot['model'])
@@ -352,7 +354,15 @@ ax.set_yticklabels(df_plot['model'])
 ax.set_xlabel('Runtime (seconds)')
 ax.set_title('Runtime: Fit + Predict on Test Set')
 
-plt.legend(['Foundation', 'Metalearner'], loc='lower right')
+# Explicit legend handles -- a bare `plt.legend([...])` call grabs whatever
+# single bar-container artist happens to exist on the current axes and
+# mislabels it (verified directly: it picked up the first bar's actual
+# color, not a color matching the given label).
+legend_handles = [
+    mpatches.Patch(color=FOUNDATION_COLOR, label='Foundation'),
+    mpatches.Patch(color=METALEARNER_COLOR, label='Metalearner'),
+]
+axes[1].legend(handles=legend_handles, loc='lower right')
 plt.tight_layout()
 plt.savefig("lalonde_benchmark.png", dpi=150)
 plt.show()
