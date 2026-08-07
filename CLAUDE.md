@@ -119,7 +119,7 @@ train_idx, test_idx = ds.train_test_split(0.7, seed=0)
 All generators register in `GENERATORS` and accept `(n, seed)` kwargs.
 
 **`data_loader.py`** — Real-world dataset loading:
-- `load_lalonde()` — loads Lalonde benchmark from causalml
+- `load_lalonde()` — downloads Lalonde benchmark directly from Dehejia's NBER page (no `causalml` dependency); see `docs/LALONDE_DATASET.md`
 
 **`metrics.py`** — Evaluation metrics:
 - `evaluate_cate(tau_hat, tau_true, ...)` → dict with pehe, ate_error, bias, coverage_95, runtime_s

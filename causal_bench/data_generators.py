@@ -187,8 +187,8 @@ def make_frontdoor(n=2000, d=4, seed=0) -> SyntheticDataset:
 
     tau_const = 1.0
     y_noise = rng.normal(0, 0.5, size=n).astype(np.float32)
-    Y0 = 0.5 * X[:, 0] + 1.2 * M - 1.0 * U + y_noise
-    # Recompute M for the counterfactual T=1 vs T=0 to get true potential outcomes
+    # Potential outcomes need the counterfactual mediator under each fixed T,
+    # not the observed M above (which reflects whatever T was actually drawn).
     M0 = (0.0 + 0.2 * X[:, 1] + m_noise).astype(np.float32)
     M1 = (1.0 + 0.2 * X[:, 1] + m_noise).astype(np.float32)
     Y0_true = 0.5 * X[:, 0] + 1.2 * M0 - 1.0 * U + y_noise

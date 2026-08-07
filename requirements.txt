@@ -8,7 +8,9 @@ torch
 # Metalearners (S/T/X-learner, Debiased ML, IPW, DR)
 econml>=0.14.0
 
-# Lalonde dataset and benchmark utilities
+# Bundled with econml for the metalearners feature set; not currently
+# imported by any code here directly (Lalonde loading downloads straight
+# from NBER -- see causal_bench/data_loader.py -- no causalml needed for that)
 causalml>=0.14.0
 
 # Interactive notebook support
@@ -18,9 +20,16 @@ jupyter
 
 # Model-specific packages are installed inside notebooks as needed:
 #   - causalpfn          (pip install causalpfn)
-#   - Do-PFN             (git clone + pip install -r requirements.txt)
+#   - Do-PFN             (git clone; NOT `pip install -r Do-PFN/requirements.txt`
+#                        as-is -- pins catboost==1.1.1, no wheel for recent
+#                        Python, and DoPFNRegressor doesn't even import it.
+#                        Actual runtime deps beyond this file: networkx, tqdm,
+#                        einops. Also needs torch<2.10 -- see CLAUDE.md.)
 #   - CausalFM-toolkit   (git clone; not pip-installable, added to sys.path)
 #                        + einops, tabpfn==2.0.9, tensorboard
 #                        (do NOT install the toolkit's own requirements.txt
 #                        as-is -- it's a frozen dev env with Linux/CUDA-only
-#                        pins. Locally: `uv sync --extra causalfm`.)
+#                        pins. Locally: `uv pip install einops "tabpfn==2.0.9"
+#                        tensorboard` -- NOT `uv sync --extra causalfm`, which
+#                        reconciles the whole env and uninstalls anything
+#                        installed ad hoc outside the declared extras.)
