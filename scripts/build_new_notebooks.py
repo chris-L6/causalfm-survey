@@ -358,6 +358,54 @@ plt.savefig("lalonde_benchmark.png", dpi=150)
 plt.show()
 print("Saved to lalonde_benchmark.png")"""),
 
+    md("""## Reference output — verified successful run (Colab, GPU runtime)
+
+If your numbers look roughly like this, your setup is correct. The
+train/test split is seeded (`seed=0`), so the split itself is identical
+every run — differences beyond what's shown here come from the usual
+sources of nondeterminism in the models (GPU non-determinism, library
+version drift, CPU vs. GPU execution), not from your setup being wrong.
+
+**Which Lalonde data this is**: `load_lalonde("nsw_psid_trimmed")` — NSW's
+185 randomly-assigned job-training participants (`treat=1`) as the treated
+group, compared against a *subset* of 2,490 PSID survey respondents
+(`treat=0`) as the control group. The full PSID sample is restricted to
+those with propensity scores overlapping the treated group (common-support
+trimming — see `docs/LALONDE_DATASET.md`), since the untrimmed pairing has
+almost no covariate overlap at all (PSID respondents are on average 9 years
+older, mostly married vs. mostly not, and earn ~9x more pre-treatment) and
+defeats every method here by construction rather than by genuine
+difficulty. `ds.ate` (the row all models are scored against) is **not**
+computed from this treated/control pairing at all — it's the true
+experimental ATE (**$1,794.34**) from a separate randomized comparison
+(NSW-treated vs. NSW's own experimental control group), the standard
+literature benchmark for this program.
+
+| Model | ATE_hat | ATE_true | ATE_abs_error | ATE_rel_error | Runtime (s) |
+|---|---|---|---|---|---|
+| S-learner | $150 | $1,794 | $1,645 | 0.92 | 0.57 |
+| Do-PFN (Foundation) | $4,222 | $1,794 | $2,428 | 1.35 | 4.97 |
+| CausalFM (Foundation) | -$926 | $1,794 | $2,720 | 1.52 | 0.32 |
+| CausalPFN (Foundation) | -$2,553 | $1,794 | $4,347 | 2.42 | 5.51 |
+| Debiased ML | -$3,079 | $1,794 | $4,873 | 2.72 | 0.88 |
+| T-learner / IPW | -$3,774 | $1,794 | $5,568 | 3.10 | 0.57–0.70 |
+| DR (Doubly Robust) | -$4,014 | $1,794 | $5,808 | 3.24 | 0.68 |
+| X-learner | -$4,176 | $1,794 | $5,970 | 3.33 | 0.97 |
+
+![Reference plot: ATE error and runtime, foundation models vs. metalearners](assets/lalonde_reference_output_colab.png)
+
+**S-learner is most accurate here**, and the only model within the same
+order of magnitude as the true effect. All three foundation models cluster
+in the middle of the pack — **Do-PFN** and **CausalFM** actually beat most
+metalearners, while **CausalPFN** lands in between. Every metalearner
+except S-learner underestimates by a similar amount (roughly -$3,800 to
+-$4,200) — consistent with them all reacting to the same remaining
+confounding in the trimmed sample, rather than each failing independently.
+Runtime-wise, CausalPFN and Do-PFN are markedly slower than everything else
+here (GPU inference + framework overhead on a dataset this small dwarfs the
+actual computation), while CausalFM and every metalearner finish in under a
+second."""),
+
     md("""## Interpretation
 
 **ATE Error** (lower is better):
