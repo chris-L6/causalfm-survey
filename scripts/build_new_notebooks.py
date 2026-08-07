@@ -124,7 +124,10 @@ else:
     print('    uv pip install "torch<2.10"')
     print("then restart this notebook's kernel and re-run from the top.")"""),
 
-    code("""%pip install -q econml causalpfn
+    code("""# "pandas<2.4" pin: econml has no pandas upper bound, so pip's resolver
+# otherwise grabs the newest pandas (3.x) -- which conflicts with Colab's
+# preinstalled google-colab/cudf-cu12/dask-cudf-cu12 (all require pandas<2.4).
+%pip install -q econml causalpfn "pandas<2.4"
 import numpy as np, pandas as pd, time, warnings
 warnings.filterwarnings('ignore')
 
