@@ -28,10 +28,10 @@ Features: `age`, `educ`, `black`, `hisp`, `married`, `nodegree`, `re74`,
 
 ## The numbers, verified directly
 
-```
-True experimental ATE   (NSW-treated vs. NSW-control):  $1,794.34
-Naive observed diff     (NSW-treated vs. PSID-controls): -$15,204.78
-```
+| Comparison | ATE |
+|---|---|
+| True experimental ATE (NSW-treated vs. NSW-control) | $1,794.34 |
+| Naive observed diff (NSW-treated vs. PSID-controls) | -$15,204.78 |
 
 The true effect is a modest positive number — the job-training program
 helped, a bit. The naive comparison says the opposite and by a huge margin,
@@ -97,25 +97,27 @@ support**: fit `p(treat=1|X)` on the pooled sample (`causal_bench/data_loader.py
 `_trim_to_common_support`), keep only control units whose score falls
 within the range actually observed among treated units. Verified effect:
 
-```
-n dropped: 1,392 of 2,490 PSID-control units (56%)
-Naive observed diff, trimmed:   -$5,896.60   (vs. -$15,204.78 untrimmed)
-```
+| Metric | Value |
+|---|---|
+| PSID-control units dropped | 1,392 of 2,490 (56%) |
+| Naive observed diff, trimmed | -$5,896.60 |
+| Naive observed diff, untrimmed (for comparison) | -$15,204.78 |
 
 Trimming doesn't eliminate confounding among the units that remain — the
 naive diff-in-means is still far from the true $1,794 — but it removes the
 impossible-by-construction part of the problem. Verified effect on actual
 model accuracy (absolute ATE error, lower is better):
 
-| Model | Untrimmed | Trimmed |
-|---|---|---|
-| S-learner | $2,561 | **$1,645** |
-| Do-PFN | $7,010 | **$2,428** (now sign-correct: +$4,222) |
-| CausalFM | $2,092 | $2,720 |
-| Debiased ML | $12,278 | **$4,265** |
-| T-learner / IPW | $15,262 | **$5,568** |
-| DR | $16,205 | **$5,836** |
-| X-learner | $11,305 | **$6,015** |
+| Model | Untrimmed error | Trimmed error | Notes |
+|---|---|---|---|
+| S-learner | $2,561 | **$1,645** | |
+| Do-PFN | $7,010 | **$2,428** | now sign-correct: +$4,222 |
+| CausalFM | $2,092 | $2,720 | |
+| Debiased ML | $12,278 | **$4,265** | |
+| T-learner | $15,262 | **$5,568** | |
+| IPW | $15,262 | **$5,568** | identical to T-learner here |
+| DR | $16,205 | **$5,836** | |
+| X-learner | $11,305 | **$6,015** | |
 
 Every metalearner improves substantially, Do-PFN becomes sign-correct for
 the first time, and S-learner becomes the most accurate model overall.
@@ -140,7 +142,8 @@ models on `nsw_psid_trimmed`, from Colab with a GPU runtime, matching the
 | CausalFM (Foundation) | -$926 | $1,794 | $2,720 | 1.52 | 0.32 |
 | CausalPFN (Foundation) | -$2,553 | $1,794 | $4,347 | 2.42 | 5.51 |
 | Debiased ML | -$3,079 | $1,794 | $4,873 | 2.72 | 0.88 |
-| T-learner / IPW | -$3,774 | $1,794 | $5,568 | 3.10 | 0.57–0.70 |
+| T-learner | -$3,774 | $1,794 | $5,568 | 3.10 | 0.57 |
+| IPW | -$3,774 | $1,794 | $5,568 | 3.10 | 0.70 |
 | DR (Doubly Robust) | -$4,014 | $1,794 | $5,808 | 3.24 | 0.68 |
 | X-learner | -$4,176 | $1,794 | $5,970 | 3.33 | 0.97 |
 
