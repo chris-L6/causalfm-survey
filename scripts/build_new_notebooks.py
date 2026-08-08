@@ -58,14 +58,27 @@ models are reported and skipped."""),
 If this is a fresh runtime, just run this cell normally. If you're
 re-running the notebook in a runtime that already ran it before (e.g. after
 a repo update), this cell detects that `causal_bench` was already imported
-earlier in the session and restarts automatically on Colab -- Python caches
-imported modules in memory, so a `git pull` alone can't make an
-already-running session pick up code changes; only a restart can. Just
-re-run this cell once it reconnects, then continue from the top."""),
+earlier in the session and restarts the kernel via Colab's own restart API
+-- Python caches imported modules in memory, so a `git pull` alone can't
+make an already-running session pick up code changes; only a restart can.
+This is a **normal, brief restart** (Colab shows a "Restarting..."
+indicator) -- a raw process kill would instead make Colab report a false
+"session crashed" error. Either way, a restart can't resume execution on
+its own: once it reconnects, re-run this cell, then continue from the
+top."""),
 
     code("""import os, sys, subprocess
 
 IN_COLAB = "google.colab" in sys.modules
+
+def _restart_colab_kernel():
+    # google.colab.kernel.restart() is Colab's own restart API -- the same
+    # one "Runtime > Restart session" uses. A raw os.kill(pid, SIGKILL) also
+    # restarts the process, but Colab's frontend doesn't recognize it as an
+    # intentional restart and reports "session crashed" instead (verified
+    # directly). Either way execution can't resume on its own afterward.
+    from IPython.display import Javascript, display
+    display(Javascript("google.colab.kernel.restart()"))
 
 # Python caches imported modules -- if causal_bench is already loaded, no
 # amount of re-cloning/pulling below will change what's in memory. Restart
@@ -78,7 +91,7 @@ if "causal_bench" in sys.modules:
     if IN_COLAB:
         print(msg + " Restarting the session now -- re-run this cell once it "
               "reconnects, then continue from the top.")
-        os.kill(os.getpid(), 9)  # Colab reconnects automatically with a fresh process
+        _restart_colab_kernel()
     else:
         raise RuntimeError(msg + " Restart the kernel (Kernel/Restart), then "
                             "run all cells again from the top.")
@@ -124,8 +137,11 @@ Do-PFN's model code depends on an internal PyTorch name removed in
 `torch>=2.10`. This must run *before* `torch` is imported anywhere else in
 this notebook (see next cell).
 
-- **On Colab**: installs `torch<2.10` and restarts the runtime automatically
-  — re-run this cell once after it reconnects, then continue from the top.
+- **On Colab**: installs `torch<2.10` and restarts the runtime through
+  Colab's own restart API — a **normal, brief restart** (you'll see a
+  "Restarting..." indicator, not a crash message). Once it reconnects,
+  re-run this cell — it should print "OK" — then continue through the rest
+  of the notebook from the top; a restart can't resume execution on its own.
 - **Locally (this repo's `uv` venv)**: `pip` isn't available inside the
   notebook, so this only detects the problem. Fix in a terminal:
   `uv pip install "torch<2.10"`, then restart the kernel.
@@ -145,8 +161,10 @@ if _torch_pre_2_10():
 elif IN_COLAB:
     print("torch >= 2.10 detected -- installing torch<2.10 and restarting the runtime...")
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "torch<2.10"], check=True)
-    print("Restarting now. After it reconnects, re-run THIS cell, then continue from the top.")
-    os.kill(os.getpid(), 9)  # Colab reconnects automatically with a fresh process
+    print("Restarting via Colab's own restart API (a clean restart, not a crash). "
+          "Once it reconnects, run this cell again -- it should print OK -- then "
+          "re-run the rest of the notebook from the top.")
+    _restart_colab_kernel()
 else:
     import torch
     print(f"torch {torch.__version__} is >= 2.10 -- Do-PFN will fail to import.")
