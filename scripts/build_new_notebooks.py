@@ -53,21 +53,33 @@ on the Lalonde real-world causal inference benchmark and produces a comparison t
 model runs independently and failures don't block the rest — unavailable or erroring
 models are reported and skipped."""),
 
-    md("""## 1. Setup
+    md("""## 1. One-time environment check — needed for Do-PFN
 
-If this is a fresh runtime, just run this cell normally. If you're
-re-running the notebook in a runtime that already ran it before (e.g. after
-a repo update), this cell detects that `causal_bench` was already imported
-earlier in the session and restarts the kernel via Colab's own restart API
--- Python caches imported modules in memory, so a `git pull` alone can't
-make an already-running session pick up code changes; only a restart can.
-This is a **normal, brief restart** (Colab shows a "Restarting..."
-indicator) -- a raw process kill would instead make Colab report a false
-"session crashed" error. Either way, a restart can't resume execution on
-its own: once it reconnects, re-run this cell, then continue from the
-top."""),
+Do-PFN's model code depends on an internal PyTorch name removed in
+`torch>=2.10`. **This must run first, before any other cell** — in
+particular before `causal_bench` gets imported below, since it transitively
+imports `torch` itself (`wrap_dopfn.py`), which would defeat the whole
+point of this cell if it ran second.
 
-    code("""import os, sys, subprocess
+- **On Colab, fresh runtime (the common case)**: reads the installed
+  torch version from package metadata *without importing torch* (Colab
+  ships `torch>=2.10` preinstalled but never auto-imports it), then
+  `pip install`s `torch<2.10` in place. Since torch was never loaded into
+  this process, **no restart is needed** — just continue to the next cell.
+- **On Colab, if torch was already imported this session** (e.g. you're
+  re-running after already running the notebook once): unavoidable now —
+  nothing can un-import an already-loaded compiled extension. Restarts via
+  Colab's own restart API, which isn't always reliable in practice
+  (verified directly) — if nothing happens within a few seconds, use
+  **Runtime > Restart session** yourself, then re-run this cell, then
+  continue from the top.
+- **Locally (this repo's `uv` venv)**: `pip` isn't available inside the
+  notebook, so this only detects the problem. Fix in a terminal:
+  `uv pip install "torch<2.10"`, then restart the kernel.
+- Not planning to run Do-PFN? Skip — CausalPFN and CausalFM work fine on any
+  recent torch."""),
+
+    code("""import sys, os, subprocess, importlib.metadata
 
 IN_COLAB = "google.colab" in sys.modules
 
@@ -76,11 +88,58 @@ def _restart_colab_kernel():
     # one "Runtime > Restart session" uses. A raw os.kill(pid, SIGKILL) also
     # restarts the process, but Colab's frontend doesn't recognize it as an
     # intentional restart and reports "session crashed" instead (verified
-    # directly). Either way execution can't resume on its own afterward.
+    # directly). Either way execution can't resume on its own afterward, and
+    # this API itself isn't always reliable (also verified directly).
     from IPython.display import Javascript, display
     display(Javascript("google.colab.kernel.restart()"))
 
-# Python caches imported modules -- if causal_bench is already loaded, no
+def _installed_torch_version():
+    try:
+        return importlib.metadata.version("torch")  # reads metadata, doesn't import torch
+    except importlib.metadata.PackageNotFoundError:
+        return None  # not installed yet -- nothing to fix here
+
+def _version_lt_2_10(version_str):
+    major, minor = (int(p) for p in version_str.split("+")[0].split(".")[:2])
+    return (major, minor) < (2, 10)
+
+_torch_version = _installed_torch_version()
+_torch_needs_downgrade = _torch_version is not None and not _version_lt_2_10(_torch_version)
+
+if not _torch_needs_downgrade:
+    print("OK -- torch version is compatible with Do-PFN (or not installed yet).")
+elif not IN_COLAB:
+    print(f"torch {_torch_version} is >= 2.10 -- Do-PFN will fail to import.")
+    print('Fix, in a terminal (not this notebook -- local uv venv has no pip):')
+    print('    uv pip install "torch<2.10"')
+    print("then restart this notebook's kernel and re-run from the top.")
+elif "torch" not in sys.modules:
+    # Colab, not imported yet -- fix in place, no restart needed.
+    print(f"torch {_torch_version} installed but not yet imported -- "
+          "installing torch<2.10 in place (no restart needed)...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "torch<2.10"], check=True)
+    print("OK -- done, continue to the next cell.")
+else:
+    # Colab, already imported -- restart is unavoidable.
+    print(f"torch {_torch_version} is already imported in this session -- installing "
+          "torch<2.10 and restarting (unavoidable once torch has been imported)...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "torch<2.10"], check=True)
+    _restart_colab_kernel()
+    print("Restart requested. If nothing happens within a few seconds, use "
+          "Runtime > Restart session yourself, then re-run this cell -- it "
+          "should print OK -- then continue from the top.")"""),
+
+    md("""## 2. Setup
+
+If this is a fresh runtime, just run this cell normally. If you're
+re-running the notebook in a runtime that already ran it before (e.g. after
+a repo update), this cell detects that `causal_bench` was already imported
+earlier in the session and restarts the kernel the same way the cell above
+does -- Python caches imported modules in memory, so a `git pull` alone
+can't make an already-running session pick up code changes; only a restart
+can."""),
+
+    code("""# Python caches imported modules -- if causal_bench is already loaded, no
 # amount of re-cloning/pulling below will change what's in memory. Restart
 # is the only fix (Colab: automatic; locally: this cell raises instead).
 if "causal_bench" in sys.modules:
@@ -89,8 +148,10 @@ if "causal_bench" in sys.modules:
            "so continuing would risk confusing errors (like an AttributeError on "
            "a field that exists in the current code but not in memory).")
     if IN_COLAB:
-        print(msg + " Restarting the session now -- re-run this cell once it "
-              "reconnects, then continue from the top.")
+        print(msg + " Restarting the session now -- if nothing happens within "
+              "a few seconds (this isn't always reliable), use Runtime > "
+              "Restart session yourself. Either way, re-run this cell once "
+              "it reconnects, then continue from the top.")
         _restart_colab_kernel()
     else:
         raise RuntimeError(msg + " Restart the kernel (Kernel/Restart), then "
@@ -130,47 +191,6 @@ else:
 
 import causal_bench
 print("causal_bench imported from:", causal_bench.__file__)"""),
-
-    md("""### One-time environment check — needed for Do-PFN
-
-Do-PFN's model code depends on an internal PyTorch name removed in
-`torch>=2.10`. This must run *before* `torch` is imported anywhere else in
-this notebook (see next cell).
-
-- **On Colab**: installs `torch<2.10` and restarts the runtime through
-  Colab's own restart API — a **normal, brief restart** (you'll see a
-  "Restarting..." indicator, not a crash message). Once it reconnects,
-  re-run this cell — it should print "OK" — then continue through the rest
-  of the notebook from the top; a restart can't resume execution on its own.
-- **Locally (this repo's `uv` venv)**: `pip` isn't available inside the
-  notebook, so this only detects the problem. Fix in a terminal:
-  `uv pip install "torch<2.10"`, then restart the kernel.
-- Not planning to run Do-PFN? Skip — CausalPFN and CausalFM work fine on any
-  recent torch."""),
-
-    code("""def _torch_pre_2_10():
-    try:
-        import torch
-    except ImportError:
-        return True  # not installed yet -- nothing to fix here
-    major, minor = (int(p) for p in torch.__version__.split("+")[0].split(".")[:2])
-    return (major, minor) < (2, 10)
-
-if _torch_pre_2_10():
-    print("OK -- torch version is compatible with Do-PFN (or not installed yet).")
-elif IN_COLAB:
-    print("torch >= 2.10 detected -- installing torch<2.10 and restarting the runtime...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "torch<2.10"], check=True)
-    print("Restarting via Colab's own restart API (a clean restart, not a crash). "
-          "Once it reconnects, run this cell again -- it should print OK -- then "
-          "re-run the rest of the notebook from the top.")
-    _restart_colab_kernel()
-else:
-    import torch
-    print(f"torch {torch.__version__} is >= 2.10 -- Do-PFN will fail to import.")
-    print('Fix, in a terminal (not this notebook -- local uv venv has no pip):')
-    print('    uv pip install "torch<2.10"')
-    print("then restart this notebook's kernel and re-run from the top.")"""),
 
     code("""# "pandas<2.4" pin: econml has no pandas upper bound, so pip's resolver
 # otherwise grabs the newest pandas (3.x) -- which conflicts with Colab's
@@ -214,7 +234,7 @@ if IN_COLAB:
     get_ipython().system('pip install -q networkx tqdm einops "tabpfn==2.0.9" tensorboard')
 # Locally: uv pip install networkx tqdm einops "tabpfn==2.0.9" tensorboard"""),
 
-    md("""## 2. Load Lalonde Dataset
+    md("""## 3. Load Lalonde Dataset
 
 Uses `variant="nsw_psid_trimmed"`: NSW-treated vs. PSID-controls restricted
 to common propensity-score support (see `docs/LALONDE_DATASET.md`). The
@@ -238,7 +258,7 @@ T_train, Y_train = ds.T[train_idx], ds.Y[train_idx]
 
 print(f"  train: n={len(train_idx)}, test: n={len(test_idx)}")"""),
 
-    md("## 3. Foundation Model Availability"),
+    md("## 4. Foundation Model Availability"),
 
     code("""from causal_bench import CausalPFNWrapper, DoPFNWrapper, CausalFMWrapper
 
@@ -253,7 +273,7 @@ for name, cls in FOUNDATION_MODELS.items():
     print(f"  {'✓' if cls.is_available() else '✗'}  {name}")
 print(f"\\ndevice: {device}")"""),
 
-    md("## 4. Run All Models"),
+    md("## 5. Run All Models"),
 
     code("""from causal_bench import (
     SLearnerWrapper, TLearnerWrapper, XLearnerWrapper,
@@ -334,7 +354,7 @@ for fm_name, model_cls in FOUNDATION_MODELS.items():
 
 print("\\n" + "=" * 70)"""),
 
-    md("## 5. Results Table"),
+    md("## 6. Results Table"),
 
     code("""df = pd.DataFrame(results)
 df_sorted = df.sort_values("ate_abs_error")
@@ -345,7 +365,7 @@ print(df_sorted[["model", "ate_hat", "ate_true", "ate_abs_error", "ate_rel_error
 df_sorted.to_csv("lalonde_benchmark.csv", index=False)
 print("\\nSaved to lalonde_benchmark.csv")"""),
 
-    md("## 6. Visualization"),
+    md("## 7. Visualization"),
 
     code("""import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
